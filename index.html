@@ -1,0 +1,1152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#000000" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Baby Monitor Bridge</title>
+  <link rel="manifest" href="./manifest.json" />
+  <!-- PeerJS via CDN – free signalling, no account needed -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <style>
+    /* ── Reset ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    /* ── Design tokens ── */
+    :root {
+      --bg:       #000000;
+      --surface:  #111827;
+      --surface2: #1f2937;
+      --border:   #374151;
+      --text:     #f9fafb;
+      --dim:      #9ca3af;
+      --accent:   #f97316;
+      --green:    #22c55e;
+      --red:      #ef4444;
+      --yellow:   #facc15;
+    }
+
+    /* ── Base ── */
+    html { font-size: 16px; -webkit-text-size-adjust: 100%; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100dvh;
+    }
+
+    #app {
+      max-width: 480px;
+      margin: 0 auto;
+      padding: 12px 16px max(16px, env(safe-area-inset-bottom));
+    }
+
+    /* ── Header ── */
+    header { text-align: center; padding: 20px 0 14px; }
+    header h1 { font-size: 1.45rem; font-weight: 700; color: var(--accent); }
+    header p  { font-size: 0.78rem; color: var(--dim); margin-top: 3px; }
+
+    /* ── Mode toggle ── */
+    .mode-toggle {
+      display: flex;
+      gap: 6px;
+      background: var(--surface);
+      border-radius: 12px;
+      padding: 4px;
+      margin-bottom: 14px;
+    }
+    .mode-toggle button {
+      flex: 1; padding: 10px 6px;
+      border: none; border-radius: 8px;
+      background: transparent; color: var(--dim);
+      font-size: 0.95rem; cursor: pointer;
+      transition: all .18s;
+    }
+    .mode-toggle button.active {
+      background: var(--accent); color: #fff; font-weight: 600;
+    }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 15px;
+      margin-bottom: 11px;
+    }
+    .card-title {
+      font-size: 0.72rem; text-transform: uppercase;
+      letter-spacing: .08em; color: var(--dim); margin-bottom: 10px;
+    }
+
+    /* ── Form elements ── */
+    label { display: block; font-size: .85rem; color: var(--dim); margin-bottom: 5px; }
+    input[type="password"], input[type="text"] {
+      width: 100%; padding: 12px 13px;
+      background: var(--surface2); border: 1.5px solid var(--border);
+      border-radius: 8px; color: var(--text); font-size: 1rem;
+      outline: none; -webkit-appearance: none;
+    }
+    input[type="password"]:focus, input[type="text"]:focus {
+      border-color: var(--accent);
+    }
+    .hint { font-size: .72rem; color: var(--dim); margin-top: 4px; }
+
+    /* ── Level meter ── */
+    .meter-wrap {
+      position: relative; height: 26px;
+      background: var(--surface2); border-radius: 6px;
+      overflow: visible; margin: 8px 0;
+    }
+    .meter-inner {
+      position: relative; height: 100%;
+      border-radius: 6px; overflow: hidden;
+    }
+    #level-bar {
+      position: absolute; left: 0; top: 0;
+      height: 100%; width: 0%;
+      background: var(--green); border-radius: 6px;
+      transition: width .06s linear, background .12s;
+    }
+    #threshold-marker {
+      position: absolute; top: -3px; bottom: -3px;
+      width: 3px; background: var(--accent); border-radius: 2px;
+      pointer-events: none; z-index: 2;
+    }
+    .meter-labels {
+      display: flex; justify-content: space-between;
+      font-size: .72rem; color: var(--dim); margin-top: 2px;
+    }
+    #level-value { font-size: .72rem; color: var(--dim); }
+
+    /* ── Slider ── */
+    input[type="range"] {
+      width: 100%; height: 6px;
+      -webkit-appearance: none; appearance: none;
+      background: var(--surface2); border-radius: 3px; outline: none; margin: 8px 0;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 22px; height: 22px;
+      border-radius: 50%; background: var(--accent); cursor: pointer;
+    }
+    input[type="range"]::-moz-range-thumb {
+      width: 22px; height: 22px; border-radius: 50%;
+      background: var(--accent); cursor: pointer; border: none;
+    }
+
+    /* ── Buttons ── */
+    .btn-row { display: flex; gap: 8px; margin-top: 12px; }
+    button.btn {
+      flex: 1; padding: 14px 8px;
+      border: none; border-radius: 8px;
+      font-size: .95rem; font-weight: 500; cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      transition: opacity .15s, transform .1s;
+    }
+    button.btn:active:not(:disabled) { transform: scale(.97); }
+    button.btn:disabled { opacity: .35; cursor: not-allowed; transform: none !important; }
+    .btn-primary   { background: var(--accent); color: #fff; }
+    .btn-secondary { background: var(--surface2); color: var(--text); border: 1.5px solid var(--border); }
+    .btn-danger    { background: var(--red); color: #fff; }
+    .btn-green     { background: var(--green); color: #fff; }
+
+    /* ── Status row ── */
+    .status-row {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+    }
+    .dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: var(--border); flex-shrink: 0;
+    }
+    .dot.green  { background: var(--green);  box-shadow: 0 0 6px var(--green); }
+    .dot.red    { background: var(--red);    box-shadow: 0 0 6px var(--red); }
+    .dot.yellow { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); animation: blink .9s infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+    .status-text { font-size: .88rem; color: var(--dim); }
+
+    /* ── Streaming badge ── */
+    .streaming-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 12px; background: var(--red);
+      border-radius: 20px; font-size: .78rem; font-weight: 600;
+      animation: pulse 1s infinite; margin-bottom: 10px;
+    }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.55} }
+
+    /* ── Receiver count badge ── */
+    .rx-badge {
+      display: inline-block; min-width: 22px; height: 22px; line-height: 22px;
+      text-align: center; border-radius: 11px;
+      background: var(--accent); color: #fff; font-size: .78rem; font-weight: 700;
+    }
+
+    /* ── Event log ── */
+    #event-log { max-height: 260px; overflow-y: auto; }
+    .log-entry {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 0; border-bottom: 1px solid var(--border);
+      font-size: .85rem;
+    }
+    .log-entry:last-child { border-bottom: none; }
+    .log-time { color: var(--dim); min-width: 72px; font-size: .78rem; font-variant-numeric: tabular-nums; }
+    .log-icon { font-size: 1rem; }
+    .log-desc { color: var(--text); }
+    .log-empty { color: var(--dim); font-size: .85rem; text-align: center; padding: 16px 0; }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed; bottom: 28px; left: 50%;
+      transform: translateX(-50%) translateY(120px);
+      background: #1f2937; color: var(--text);
+      border: 1px solid var(--border);
+      padding: 11px 22px; border-radius: 10px;
+      font-size: .9rem; z-index: 999;
+      transition: transform .28s ease;
+      max-width: 90vw; text-align: center;
+      box-shadow: 0 4px 24px rgba(0,0,0,.6);
+    }
+    #toast.show { transform: translateX(-50%) translateY(0); }
+
+    /* ── Wake lock indicator ── */
+    #wakelock-indicator {
+      font-size: .72rem; color: var(--dim); text-align: center; margin-top: 6px;
+    }
+
+    /* ── Push status ── */
+    .push-status { font-size: .78rem; color: var(--dim); margin-top: 6px; }
+    .push-status.ok { color: var(--green); }
+    .push-status.warn { color: var(--yellow); }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <h1>👶 Baby Monitor Bridge</h1>
+    <p>P2P encrypted · Zero cost · No server</p>
+  </header>
+
+  <!-- Mode toggle -->
+  <div class="mode-toggle">
+    <button id="btn-mode-sender" class="active" onclick="switchMode('sender')">📤 Sender</button>
+    <button id="btn-mode-receiver" onclick="switchMode('receiver')">📱 Receiver</button>
+  </div>
+
+  <!-- Password (shared between modes) -->
+  <div class="card">
+    <div class="card-title">🔐 Secret Password</div>
+    <input type="password" id="password" placeholder="Enter shared password…" autocomplete="off" />
+    <p class="hint">Same password on every device. Never transmitted — used only for local encryption.</p>
+  </div>
+
+  <!-- ═══════════════ SENDER PANEL ═══════════════ -->
+  <div id="sender-panel">
+    <!-- Level meter -->
+    <div class="card">
+      <div class="card-title">Microphone level</div>
+      <div class="meter-wrap">
+        <div class="meter-inner">
+          <div id="level-bar"></div>
+        </div>
+        <div id="threshold-marker"></div>
+      </div>
+      <div class="meter-labels">
+        <span>0</span>
+        <span id="level-value">Level: 0 / Threshold: 30</span>
+        <span>100</span>
+      </div>
+
+      <!-- Threshold slider -->
+      <label for="slider-threshold" style="margin-top:12px">
+        Sensitivity threshold: <strong id="threshold-display">30</strong>
+      </label>
+      <input type="range" id="slider-threshold" min="1" max="100" value="30" />
+      <p class="hint">Lower = more sensitive. The orange marker shows the current threshold.</p>
+    </div>
+
+    <!-- Status & controls -->
+    <div class="card">
+      <div class="card-title">Status</div>
+      <div class="status-row">
+        <div id="sender-dot" class="dot"></div>
+        <span id="sender-status" class="status-text">Not started</span>
+        <span id="rx-count" class="rx-badge" style="margin-left:auto;display:none">0</span>
+      </div>
+      <div id="streaming-badge" class="streaming-badge" style="display:none">🔴 STREAMING</div>
+      <div id="wakelock-indicator"></div>
+      <div class="btn-row">
+        <button id="btn-start-monitoring" class="btn btn-primary">▶ Start Monitoring</button>
+        <button id="btn-stop-monitoring"  class="btn btn-secondary" disabled>■ Stop</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════ RECEIVER PANEL ═══════════════ -->
+  <div id="receiver-panel" hidden>
+    <!-- Status & main button -->
+    <div class="card">
+      <div class="card-title">Status</div>
+      <div class="status-row">
+        <div id="receiver-dot" class="dot"></div>
+        <span id="receiver-status" class="status-text">Not connected</span>
+      </div>
+      <div class="btn-row">
+        <button id="btn-start-listening" class="btn btn-green">👂 Start Listening</button>
+        <button id="btn-stop-listening"  class="btn btn-secondary" disabled>■ Stop</button>
+      </div>
+    </div>
+
+    <!-- Push notification status -->
+    <div class="card">
+      <div class="card-title">🔔 Push Notifications</div>
+      <div id="push-status" class="push-status">Not yet subscribed.</div>
+      <p class="hint" style="margin-top:6px">
+        Allows alerts even when the screen is off (Android Chrome + PWA). 
+        Tap "Start Listening" to subscribe.
+      </p>
+      <p class="hint" style="margin-top:6px">
+        For best background alerts: install as PWA (tap the browser menu — the three vertical dots (⋮) — then Add to Home Screen) and disable battery optimization for Chrome in Android system settings.
+      </p>
+    </div>
+
+    <!-- Event log -->
+    <div class="card">
+      <div class="card-title">Event Log</div>
+      <div id="event-log"><p class="log-empty">No events yet.</p></div>
+    </div>
+
+    <!-- Hidden audio element — plays incoming stream -->
+    <audio id="remote-audio" playsinline autoplay></audio>
+  </div>
+
+</div><!-- #app -->
+
+<!-- Toast notification -->
+<div id="toast"></div>
+
+<script>
+'use strict';
+
+/* ============================================================
+   Constants
+   ============================================================ */
+const SALT_STR         = 'baby-monitor-bridge-v1';
+const PBKDF2_ITER      = 600_000;  // OWASP-recommended minimum for PBKDF2-SHA256
+const VOX_TRIGGER_MS   = 1500;    // noise must exceed threshold for this long
+const VOX_SILENCE_MS   = 10_000;  // silence must last this long to stop stream
+const FFT_SIZE         = 256;
+const PEER_PREFIX      = 'bmb';
+const RECONNECT_DELAY  = 5000;
+
+/* ============================================================
+   App State
+   ============================================================ */
+const S = {
+  mode:      'sender',
+  password:  '',
+  cryptoKey: null,
+
+  // PeerJS
+  peer:      null,
+
+  // Sender-only
+  receivers:   new Map(),  // peerId → { dataConn, mediaConn, pushSub }
+  micStream:   null,
+  audioCtx:    null,
+  analyser:    null,
+  micSource:   null,
+  isMonitoring:  false,
+  isStreaming:   false,
+  currentLevel:  0,
+  triggerTimer:  null,
+  silenceTimer:  null,
+  rafId:         null,
+  wakeLock:      null,
+  vapidKeys:     null,
+
+  // Receiver-only
+  senderConn:      null,
+  senderMediaConn: null,
+  senderPeerId:    null,
+  reconnectTimer:  null,
+};
+
+/* ============================================================
+   Base64url utilities
+   ============================================================ */
+function ab2b64u(buf) {
+  const bytes = new Uint8Array(buf);
+  let s = '';
+  for (const b of bytes) s += String.fromCharCode(b);
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+function b64u2ab(b64u) {
+  const b64 = b64u.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = b64 + '='.repeat((4 - b64.length % 4) % 4);
+  const bin = atob(padded);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out.buffer;
+}
+
+// Encode a plain string (not bytes) to base64url
+function strToB64u(str) {
+  return btoa(unescape(encodeURIComponent(str)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+/* ============================================================
+   Crypto – PBKDF2 key derivation + AES-GCM encrypt/decrypt
+   ============================================================ */
+async function deriveKey(password) {
+  const pwdBuf  = new TextEncoder().encode(password);
+  const saltBuf = new TextEncoder().encode(SALT_STR);
+  const baseKey = await crypto.subtle.importKey('raw', pwdBuf, 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt: saltBuf, iterations: PBKDF2_ITER, hash: 'SHA-256' },
+    baseKey,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
+}
+
+async function computePeerId(password) {
+  const data = new TextEncoder().encode('peer-id:' + password);
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  // Use the full 64-char hex string (full SHA-256, 128-bit collision resistance)
+  const hex  = Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+  return `${PEER_PREFIX}-${hex}`;
+}
+
+// Returns ArrayBuffer  (IV prepended)
+async function encrypt(obj) {
+  const iv      = crypto.getRandomValues(new Uint8Array(12));
+  const plain   = new TextEncoder().encode(JSON.stringify(obj));
+  const cipher  = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, S.cryptoKey, plain);
+  const out     = new Uint8Array(12 + cipher.byteLength);
+  out.set(iv);
+  out.set(new Uint8Array(cipher), 12);
+  return out.buffer;
+}
+
+async function decrypt(data) {
+  const bytes  = data instanceof ArrayBuffer ? new Uint8Array(data)
+               : (data instanceof Uint8Array  ? data
+               : new Uint8Array(Array.from(data)));
+  const iv     = bytes.slice(0, 12);
+  const cipher = bytes.slice(12);
+  const plain  = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, S.cryptoKey, cipher);
+  return JSON.parse(new TextDecoder().decode(plain));
+}
+
+/* ============================================================
+   VAPID helpers – generate ES256 key pair, sign JWT, send push
+   ============================================================ */
+async function generateVAPIDKeys() {
+  const kp = await crypto.subtle.generateKey(
+    { name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']
+  );
+  return {
+    publicKey:  ab2b64u(await crypto.subtle.exportKey('raw',   kp.publicKey)),
+    privateKey: ab2b64u(await crypto.subtle.exportKey('pkcs8', kp.privateKey)),
+  };
+}
+
+async function ensureVAPIDKeys() {
+  const stored = localStorage.getItem('bmb-vapid-keys');
+  if (stored) { try { return JSON.parse(stored); } catch (_) {} }
+  const keys = await generateVAPIDKeys();
+  // Note: storing the VAPID private key in localStorage is intentional per the
+  // project design (zero-backend, locally-generated keys).  The key is used
+  // only to sign push notifications sent from this device.  Users on shared
+  // devices should be aware of this trade-off.
+  localStorage.setItem('bmb-vapid-keys', JSON.stringify(keys));
+  return keys;
+}
+
+async function makeVAPIDJWT(audience, privateKeyB64u) {
+  const header  = strToB64u(JSON.stringify({ alg: 'ES256', typ: 'JWT' }));
+  const payload = strToB64u(JSON.stringify({
+    aud: audience,
+    // JWT expires in 12 hours (43,200 seconds).
+    exp: Math.floor(Date.now() / 1000) + 43200,
+    sub: 'https://github.com/goozdev/baby-monitor-bridge',
+  }));
+  const input  = `${header}.${payload}`;
+  const privKey = await crypto.subtle.importKey(
+    'pkcs8', b64u2ab(privateKeyB64u),
+    { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']
+  );
+  const sig = await crypto.subtle.sign(
+    { name: 'ECDSA', hash: 'SHA-256' }, privKey, new TextEncoder().encode(input)
+  );
+  return `${input}.${ab2b64u(sig)}`;
+}
+
+async function sendWebPush(sub, vapidKeys) {
+  try {
+    const origin = new URL(sub.endpoint).origin;
+    const jwt    = await makeVAPIDJWT(origin, vapidKeys.privateKey);
+    const res    = await fetch(sub.endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `vapid t=${jwt},k=${vapidKeys.publicKey}`,
+        'TTL':           '60',
+        'Urgency':       'high',
+        'Content-Type':  'application/octet-stream',
+      },
+    });
+    dbg('Push response:', res.status);
+  } catch (e) {
+    dbg('Push send failed (likely CORS/blocked):', e.message);
+  }
+}
+
+/* ============================================================
+   Service Worker + Push subscription
+   ============================================================ */
+let swReg = null;
+
+async function registerSW() {
+  if (!('serviceWorker' in navigator)) return;
+  try {
+    swReg = await navigator.serviceWorker.register('./sw.js');
+    dbg('SW registered');
+  } catch (e) {
+    dbg('SW registration failed:', e.message);
+  }
+}
+
+async function subscribePush(vapidPublicKeyB64u) {
+  if (!swReg) return null;
+  try {
+    const appKey = new Uint8Array(b64u2ab(vapidPublicKeyB64u));
+
+    const existing = await swReg.pushManager.getSubscription();
+    if (existing) {
+      // Verify the subscription was created with the same VAPID key
+      const existingKey = existing.options && existing.options.applicationServerKey
+        ? new Uint8Array(existing.options.applicationServerKey) : null;
+      const sameKey = existingKey && existingKey.length === appKey.length
+        && existingKey.every((b, i) => b === appKey[i]);
+      if (sameKey) {
+        dbg('Reusing existing push subscription');
+        return existing;
+      }
+      // Different VAPID key — unsubscribe old one first
+      dbg('Stale push subscription — unsubscribing');
+      await existing.unsubscribe();
+    }
+
+    const sub = await swReg.pushManager.subscribe({
+      userVisibleOnly:      true,
+      applicationServerKey: appKey,
+    });
+    dbg('Push subscription created');
+    return sub;
+  } catch (e) {
+    dbg('Push subscribe failed:', e.message);
+    return null;
+  }
+}
+
+/* ============================================================
+   PeerJS – create Peer with STUN/TURN servers
+   ============================================================ */
+function makePeer(id) {
+  const opts = {
+    config: {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun.cloudflare.com:3478'  },
+        {
+          // Configure three relay URL variants for the same Open Relay server:
+          // port 80 helps on restrictive networks, the plain 443 entry lets
+          // the browser try the default TURN transport on 443 (typically UDP),
+          // and the TCP-specific 443 entry helps when carriers or firewalls
+          // only permit relayed TCP traffic.
+          urls: [
+            'turn:openrelay.metered.ca:80',
+            'turn:openrelay.metered.ca:443',
+            'turn:openrelay.metered.ca:443?transport=tcp',
+          ],
+          username: 'openrelayproject',
+          credential: 'openrelayproject',
+        },
+      ],
+    },
+  };
+  return id ? new Peer(id, opts) : new Peer(opts);
+}
+
+/* ============================================================
+   ══════════════════  SENDER  ══════════════════
+   ============================================================ */
+
+async function initSender() {
+  if (!S.password) { toast('Enter a password first'); return; }
+
+  setBtn('btn-start-monitoring', true);
+  senderStatus('yellow', 'Deriving key…');
+
+  S.cryptoKey = await deriveKey(S.password);
+  const peerId = await computePeerId(S.password);
+  S.vapidKeys  = await ensureVAPIDKeys();
+
+  senderStatus('yellow', 'Requesting microphone…');
+  try {
+    S.micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+  } catch (e) {
+    toast('Microphone denied: ' + e.message);
+    senderStatus('', 'Error: mic denied');
+    setBtn('btn-start-monitoring', false);
+    return;
+  }
+
+  // Web Audio for VOX
+  S.audioCtx  = new (window.AudioContext || window.webkitAudioContext)();
+  S.analyser  = S.audioCtx.createAnalyser();
+  S.analyser.fftSize = FFT_SIZE;
+  S.micSource = S.audioCtx.createMediaStreamSource(S.micStream);
+  S.micSource.connect(S.analyser);
+  // Do NOT connect to audioCtx.destination (no local speaker feedback)
+
+  senderStatus('yellow', 'Connecting to signalling…');
+
+  S.peer = makePeer(peerId);
+
+  S.peer.on('open', () => {
+    dbg('Sender peer open:', peerId);
+    S.isMonitoring = true;
+    setBtn('btn-stop-monitoring', false);
+    updateReceiverBadge();
+    startVOX();
+    acquireWakeLock();
+    senderStatus('green', 'Monitoring — 0 receivers');
+  });
+
+  S.peer.on('error', (err) => {
+    dbg('Sender peer error:', err.type, err.message);
+    if (err.type === 'unavailable-id') {
+      toast('Peer ID busy — wait 30 s and retry, or change password');
+    } else {
+      toast('PeerJS error: ' + err.type);
+    }
+    senderStatus('red', 'Error: ' + err.type);
+    setBtn('btn-start-monitoring', false);
+  });
+
+  S.peer.on('connection', (conn) => {
+    dbg('Incoming data connection from', conn.peer);
+    setupReceiverDataConn(conn);
+  });
+
+  S.peer.on('disconnected', () => {
+    dbg('Peer disconnected — reconnecting…');
+    if (S.peer && !S.peer.destroyed) S.peer.reconnect();
+  });
+}
+
+function setupReceiverDataConn(conn) {
+  const pid = conn.peer;
+  if (!S.receivers.has(pid)) S.receivers.set(pid, { dataConn: null, mediaConn: null, pushSub: null });
+  S.receivers.get(pid).dataConn = conn;
+
+  conn.on('open', async () => {
+    dbg('Data channel open with receiver', pid);
+    updateReceiverBadge();
+
+    // Send our VAPID public key so receiver can subscribe to push
+    try {
+      conn.send(await encrypt({ type: 'vapid_key', key: S.vapidKeys.publicKey }));
+    } catch (e) { dbg('Failed to send VAPID key:', e.message); }
+
+    // If already streaming, call this late-joining receiver
+    if (S.isStreaming && S.micStream) {
+      callReceiver(pid);
+    }
+  });
+
+  conn.on('data', async (raw) => {
+    try {
+      const msg = await decrypt(raw);
+      if (msg.type === 'register_push') {
+        S.receivers.get(pid).pushSub = msg.subscription;
+        dbg('Push subscription registered for', pid);
+      }
+    } catch (e) { dbg('Decrypt failed from', pid, ':', e.message); }
+  });
+
+  conn.on('close', () => {
+    dbg('Receiver disconnected:', pid);
+    S.receivers.delete(pid);
+    updateReceiverBadge();
+  });
+
+  conn.on('error', (err) => {
+    dbg('Receiver conn error:', err.message);
+    S.receivers.delete(pid);
+    updateReceiverBadge();
+  });
+}
+
+/* ── VOX loop ── */
+function startVOX() {
+  const data = new Uint8Array(S.analyser.frequencyBinCount);
+
+  function loop() {
+    if (!S.isMonitoring) return;
+
+    S.analyser.getByteFrequencyData(data);
+    const avg = data.reduce((acc, v) => acc + v, 0) / data.length;
+    S.currentLevel = Math.round((avg / 255) * 100);
+
+    updateLevelMeter(S.currentLevel);
+
+    const thresh = parseInt(qs('#slider-threshold').value, 10);
+
+    if (S.currentLevel > thresh) {
+      // ── Above threshold ──
+      if (S.silenceTimer) { clearTimeout(S.silenceTimer); S.silenceTimer = null; }
+      if (!S.isStreaming && !S.triggerTimer) {
+        S.triggerTimer = setTimeout(() => {
+          S.triggerTimer = null;
+          if (!S.isStreaming) startStreaming();
+        }, VOX_TRIGGER_MS);
+      }
+    } else {
+      // ── Below threshold ──
+      if (S.triggerTimer) { clearTimeout(S.triggerTimer); S.triggerTimer = null; }
+      if (S.isStreaming && !S.silenceTimer) {
+        S.silenceTimer = setTimeout(() => {
+          S.silenceTimer = null;
+          if (S.isStreaming) stopStreaming();
+        }, VOX_SILENCE_MS);
+      }
+    }
+
+    S.rafId = requestAnimationFrame(loop);
+  }
+
+  S.rafId = requestAnimationFrame(loop);
+}
+
+async function startStreaming() {
+  if (S.isStreaming || !S.micStream) return;
+  dbg('VOX triggered — opening stream');
+  S.isStreaming = true;
+  qs('#streaming-badge').style.display = 'flex';
+  senderStatus('red', `🔴 Streaming — ${S.receivers.size} receiver(s)`);
+
+  // Call every connected receiver
+  for (const [pid] of S.receivers) callReceiver(pid);
+
+  // Send alert signal + push to every receiver
+  await sendAlertToAll();
+}
+
+function callReceiver(pid) {
+  try {
+    const call = S.peer.call(pid, S.micStream);
+    S.receivers.get(pid).mediaConn = call;
+    call.on('error', (e) => dbg('Media call error to', pid, ':', e.message));
+    call.on('close', () => { if (S.receivers.has(pid)) S.receivers.get(pid).mediaConn = null; });
+  } catch (e) { dbg('Failed to call receiver', pid, ':', e.message); }
+}
+
+function stopStreaming() {
+  if (!S.isStreaming) return;
+  dbg('Silence — closing stream');
+  S.isStreaming = false;
+  qs('#streaming-badge').style.display = 'none';
+
+  for (const [, rx] of S.receivers) {
+    if (rx.mediaConn) { rx.mediaConn.close(); rx.mediaConn = null; }
+  }
+
+  senderStatus('green', `Monitoring — ${S.receivers.size} receiver(s)`);
+}
+
+async function sendAlertToAll() {
+  const payload = { type: 'alert', timestamp: Date.now(), level: S.currentLevel };
+  for (const [pid, rx] of S.receivers) {
+    // Data channel alert
+    if (rx.dataConn && rx.dataConn.open) {
+      try { rx.dataConn.send(await encrypt(payload)); } catch (e) { dbg('Alert send error:', e.message); }
+    }
+    // Web Push (best-effort; may be blocked by CORS)
+    if (rx.pushSub && S.vapidKeys) {
+      sendWebPush(rx.pushSub, S.vapidKeys);
+    }
+  }
+}
+
+async function stopSender() {
+  dbg('Stopping sender');
+  S.isMonitoring = false;
+  stopStreaming();
+
+  if (S.rafId) { cancelAnimationFrame(S.rafId); S.rafId = null; }
+  if (S.triggerTimer) { clearTimeout(S.triggerTimer); S.triggerTimer = null; }
+  if (S.silenceTimer) { clearTimeout(S.silenceTimer); S.silenceTimer = null; }
+
+  if (S.peer) { S.peer.destroy(); S.peer = null; }
+  S.receivers.clear();
+
+  if (S.micStream) { S.micStream.getTracks().forEach(t => t.stop()); S.micStream = null; }
+  if (S.audioCtx)  { await S.audioCtx.close().catch(() => {}); S.audioCtx = null; }
+
+  releaseWakeLock();
+  updateLevelMeter(0);
+  updateReceiverBadge();
+  qs('#streaming-badge').style.display = 'none';
+  setBtn('btn-start-monitoring', false);
+  setBtn('btn-stop-monitoring',  true);
+  senderStatus('', 'Stopped');
+  qs('#wakelock-indicator').textContent = '';
+}
+
+/* ── Wake Lock ── */
+async function acquireWakeLock() {
+  if (!('wakeLock' in navigator)) {
+    qs('#wakelock-indicator').textContent = '⚠ Wake Lock not supported — keep screen on manually';
+    return;
+  }
+  try {
+    S.wakeLock = await navigator.wakeLock.request('screen');
+    qs('#wakelock-indicator').textContent = '🔆 Screen wake lock active';
+    S.wakeLock.addEventListener('release', () => {
+      S.wakeLock = null;
+      qs('#wakelock-indicator').textContent = '⚠ Wake lock released';
+      if (S.isMonitoring) acquireWakeLock(); // re-acquire
+    });
+  } catch (e) {
+    qs('#wakelock-indicator').textContent = '⚠ Wake lock failed: ' + e.message;
+  }
+}
+
+function releaseWakeLock() {
+  if (S.wakeLock) { S.wakeLock.release().catch(() => {}); S.wakeLock = null; }
+  qs('#wakelock-indicator').textContent = '';
+}
+
+/* ── Re-acquire wake lock when page becomes visible again ── */
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && S.isMonitoring && !S.wakeLock) {
+    acquireWakeLock();
+  }
+});
+
+/* ============================================================
+   ══════════════════  RECEIVER  ══════════════════
+   ============================================================ */
+
+async function initReceiver() {
+  if (!S.password) { toast('Enter a password first'); updateReceiverBtns('idle'); return; }
+
+  receiverStatus('yellow', 'Deriving key…');
+  S.cryptoKey   = await deriveKey(S.password);
+  S.senderPeerId = await computePeerId(S.password);
+
+  // Register SW first (needed for push)
+  await registerSW();
+
+  // Request notification permission
+  if ('Notification' in window && Notification.permission === 'default') {
+    await Notification.requestPermission();
+  }
+
+  receiverStatus('yellow', 'Connecting…');
+  S.peer = makePeer(); // random ID
+
+  S.peer.on('open', (id) => {
+    dbg('Receiver peer open:', id);
+    connectToSender();
+  });
+
+  S.peer.on('error', (err) => {
+    dbg('Receiver peer error:', err.type);
+    toast('Connection error: ' + err.type);
+    receiverStatus('red', 'Error: ' + err.type);
+    updateReceiverBtns('idle');
+  });
+
+  // Sender will call us when noise is detected
+  S.peer.on('call', (call) => {
+    // Verify the call originates from the expected sender peer ID
+    if (call.peer !== S.senderPeerId) {
+      dbg('Rejected call from unexpected peer:', call.peer);
+      call.close();
+      return;
+    }
+    dbg('Incoming audio call from sender');
+    S.senderMediaConn = call;
+    call.answer(); // answer without sending audio back
+
+    call.on('stream', (remoteStream) => {
+      dbg('Remote audio stream received');
+      const audio = qs('#remote-audio');
+      audio.srcObject = remoteStream;
+      audio.play().catch(e => dbg('Audio play error:', e.message));
+      receiverStatus('green', '🔊 Audio playing');
+      addLogEntry('🔊', 'Audio stream started');
+    });
+
+    call.on('close', () => {
+      dbg('Audio stream ended');
+      const audio = qs('#remote-audio');
+      audio.srcObject = null;
+      receiverStatus('green', 'Connected — stream ended');
+      addLogEntry('🔕', 'Audio stream ended');
+    });
+
+    call.on('error', (e) => dbg('Call error:', e.message));
+  });
+
+  S.peer.on('disconnected', () => {
+    if (S.peer && !S.peer.destroyed) S.peer.reconnect();
+  });
+}
+
+function connectToSender() {
+  dbg('Connecting to sender:', S.senderPeerId);
+  S.senderConn = S.peer.connect(S.senderPeerId, { reliable: true, serialization: 'raw' });
+
+  S.senderConn.on('open', () => {
+    dbg('Data channel to sender open');
+    receiverStatus('green', 'Connected to sender');
+    updateReceiverBtns('connected');
+    if (S.reconnectTimer) { clearTimeout(S.reconnectTimer); S.reconnectTimer = null; }
+  });
+
+  S.senderConn.on('data', async (raw) => {
+    try {
+      const msg = await decrypt(raw);
+      await handleSenderMsg(msg);
+    } catch (e) { dbg('Decrypt from sender failed:', e.message); }
+  });
+
+  S.senderConn.on('close', () => {
+    dbg('Data channel to sender closed');
+    receiverStatus('yellow', 'Disconnected — retrying…');
+    updateReceiverBtns('connecting');
+    scheduleReconnect();
+  });
+
+  S.senderConn.on('error', (err) => {
+    dbg('Sender data conn error:', err.message);
+    scheduleReconnect();
+  });
+}
+
+function scheduleReconnect() {
+  if (S.reconnectTimer || !S.peer || S.peer.destroyed) return;
+  S.reconnectTimer = setTimeout(() => {
+    S.reconnectTimer = null;
+    if (S.peer && !S.peer.destroyed) connectToSender();
+  }, RECONNECT_DELAY);
+}
+
+async function handleSenderMsg(msg) {
+  if (msg.type === 'vapid_key') {
+    dbg('Received VAPID public key from sender');
+    const sub = await subscribePush(msg.key);
+    if (sub) {
+      qs('#push-status').textContent = '✅ Push subscription active';
+      qs('#push-status').className = 'push-status ok';
+      // Serialize and send back to sender
+      try {
+        const subObj = JSON.parse(JSON.stringify(sub));
+        S.senderConn.send(await encrypt({ type: 'register_push', subscription: subObj }));
+        dbg('Push subscription sent to sender');
+      } catch (e) { dbg('Failed to send push sub:', e.message); }
+    } else {
+      qs('#push-status').textContent = '⚠ Push not available (check browser permissions)';
+      qs('#push-status').className = 'push-status warn';
+    }
+  } else if (msg.type === 'alert') {
+    handleAlert(msg);
+  }
+}
+
+function handleAlert(msg) {
+  const time = new Date(msg.timestamp).toLocaleTimeString();
+  addLogEntry('🔔', `Noise detected (level ${msg.level || '—'})`);
+
+  // Hardware vibration
+  if ('vibrate' in navigator) navigator.vibrate([300, 100, 300, 100, 300]);
+
+  // In-app notification (works when tab is in background on some Android configs)
+  if ('Notification' in window && Notification.permission === 'granted') {
+    try {
+      new Notification('👶 Baby Alert!', {
+        body:    `Noise detected at ${time}`,
+        icon:    './icon-192.png',
+        vibrate: [300, 100, 300],
+        tag:     'baby-alert',
+        renotify: true,
+      });
+    } catch (_) { /* silent fail — SW push will handle background */ }
+  }
+}
+
+async function stopReceiver() {
+  dbg('Stopping receiver');
+  if (S.reconnectTimer) { clearTimeout(S.reconnectTimer); S.reconnectTimer = null; }
+  if (S.senderConn)      { S.senderConn.close();      S.senderConn = null; }
+  if (S.senderMediaConn) { S.senderMediaConn.close(); S.senderMediaConn = null; }
+  if (S.peer)            { S.peer.destroy();           S.peer = null; }
+  const audio = qs('#remote-audio');
+  if (audio) audio.srcObject = null;
+  receiverStatus('', 'Stopped');
+  updateReceiverBtns('idle');
+}
+
+/* ============================================================
+   UI helpers
+   ============================================================ */
+function qs(sel) { return document.querySelector(sel); }
+
+function switchMode(mode) {
+  if (S.mode === mode) return;
+  S.mode = mode;
+
+  // Tear down whatever is running
+  if (S.peer) {
+    if (mode === 'sender') stopReceiver(); else stopSender();
+  }
+
+  qs('#sender-panel').hidden   = (mode !== 'sender');
+  qs('#receiver-panel').hidden = (mode !== 'receiver');
+  qs('#btn-mode-sender').classList.toggle('active',   mode === 'sender');
+  qs('#btn-mode-receiver').classList.toggle('active', mode === 'receiver');
+}
+
+function updateLevelMeter(level) {
+  const bar    = qs('#level-bar');
+  const marker = qs('#threshold-marker');
+  const label  = qs('#level-value');
+  const thresh = parseInt(qs('#slider-threshold').value, 10);
+
+  if (bar) {
+    bar.style.width      = level + '%';
+    bar.style.background = level > thresh ? 'var(--red)' : 'var(--green)';
+  }
+  if (marker) marker.style.left = thresh + '%';
+  if (label)  label.textContent = `Level: ${level} / Threshold: ${thresh}`;
+}
+
+function updateReceiverBadge() {
+  const badge = qs('#rx-count');
+  const n     = S.receivers.size;
+  badge.textContent = n;
+  badge.style.display = S.isMonitoring ? 'inline-block' : 'none';
+  if (S.isMonitoring) {
+    senderStatus(S.isStreaming ? 'red' : 'green',
+      `${S.isStreaming ? '🔴 Streaming' : 'Monitoring'} — ${n} receiver${n !== 1 ? 's' : ''}`);
+  }
+}
+
+function senderStatus(dotClass, text) {
+  const dot = qs('#sender-dot');
+  dot.className = 'dot' + (dotClass ? ' ' + dotClass : '');
+  qs('#sender-status').textContent = text;
+}
+
+function receiverStatus(dotClass, text) {
+  const dot = qs('#receiver-dot');
+  dot.className = 'dot' + (dotClass ? ' ' + dotClass : '');
+  qs('#receiver-status').textContent = text;
+}
+
+function setBtn(id, disabled) {
+  const el = qs('#' + id);
+  if (el) el.disabled = disabled;
+}
+
+function updateReceiverBtns(state) {
+  // state: 'idle' | 'connecting' | 'connected'
+  setBtn('btn-start-listening', state !== 'idle');
+  setBtn('btn-stop-listening',  state !== 'connected');
+}
+
+function addLogEntry(icon, desc) {
+  const log = qs('#event-log');
+  // Remove placeholder if present
+  const placeholder = log.querySelector('.log-empty');
+  if (placeholder) placeholder.remove();
+
+  const time  = new Date().toLocaleTimeString();
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  const timeEl = document.createElement('span');
+  timeEl.className = 'log-time';
+  timeEl.textContent = time;
+  const iconEl = document.createElement('span');
+  iconEl.className = 'log-icon';
+  iconEl.textContent = icon;
+  const descEl = document.createElement('span');
+  descEl.className = 'log-desc';
+  descEl.textContent = desc;
+  entry.append(timeEl, iconEl, descEl);
+  log.insertBefore(entry, log.firstChild);
+
+  // Cap log at 30 entries
+  while (log.children.length > 30) log.removeChild(log.lastChild);
+}
+
+function toast(msg, ms = 3500) {
+  const el = qs('#toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), ms);
+}
+
+function dbg(...args) { console.log('[BMB]', ...args); }
+
+/* ============================================================
+   Event wiring
+   ============================================================ */
+document.addEventListener('DOMContentLoaded', () => {
+
+  // Password sync
+  qs('#password').addEventListener('input', (e) => { S.password = e.target.value.trim(); });
+
+  // Slider
+  qs('#slider-threshold').addEventListener('input', (e) => {
+    qs('#threshold-display').textContent = e.target.value;
+    updateLevelMeter(S.currentLevel); // refresh marker position
+  });
+
+  // Sender buttons
+  qs('#btn-start-monitoring').addEventListener('click', () => {
+    setBtn('btn-start-monitoring', true);
+    initSender();
+  });
+  qs('#btn-stop-monitoring').addEventListener('click', stopSender);
+
+  // Receiver buttons
+  qs('#btn-start-listening').addEventListener('click', () => {
+    updateReceiverBtns('connecting');
+    initReceiver();
+  });
+  qs('#btn-stop-listening').addEventListener('click', stopReceiver);
+
+  // Resume AudioContext on any tap (mobile autoplay policy)
+  document.addEventListener('click', () => {
+    if (S.audioCtx && S.audioCtx.state === 'suspended') S.audioCtx.resume();
+  });
+
+  // Initialize level meter marker at default threshold position
+  updateLevelMeter(0);
+});
+</script>
+</body>
+</html>
