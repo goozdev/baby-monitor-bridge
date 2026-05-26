@@ -307,6 +307,9 @@
         Allows alerts even when the screen is off (Android Chrome + PWA). 
         Tap "Start Listening" to subscribe.
       </p>
+      <p class="hint" style="margin-top:6px">
+        For best background alerts: install as PWA (tap ⋮ → Add to Home Screen) and disable battery optimisation for Chrome in Android settings.
+      </p>
     </div>
 
     <!-- Event log -->
@@ -552,7 +555,7 @@ async function subscribePush(vapidPublicKeyB64u) {
 }
 
 /* ============================================================
-   PeerJS – create Peer with STUN servers
+   PeerJS – create Peer with STUN/TURN servers
    ============================================================ */
 function makePeer(id) {
   const opts = {
@@ -562,6 +565,15 @@ function makePeer(id) {
         { urls: 'stun:stun1.l.google.com:19302' },
         { urls: 'stun:stun2.l.google.com:19302' },
         { urls: 'stun:stun.cloudflare.com:3478'  },
+        {
+          urls: [
+            'turn:openrelay.metered.ca:80',
+            'turn:openrelay.metered.ca:443',
+            'turn:openrelay.metered.ca:443?transport=tcp',
+          ],
+          username: 'openrelayproject',
+          credential: 'openrelayproject',
+        },
       ],
     },
   };
