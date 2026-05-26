@@ -566,10 +566,10 @@ function makePeer(id) {
         { urls: 'stun:stun2.l.google.com:19302' },
         { urls: 'stun:stun.cloudflare.com:3478'  },
         {
-          // Keep all three relays: port 80 helps on restrictive networks, one
-          // 443 entry lets the browser try the default TURN transport on 443,
-          // and the TCP-specific 443 entry helps when carriers or firewalls
-          // only permit relayed TCP traffic.
+          // Keep all three relays: port 80 helps on restrictive networks, the
+          // plain 443 entry lets the browser try the default TURN transport
+          // on 443 (typically UDP), and the TCP-specific 443 entry helps when
+          // carriers or firewalls only permit relayed TCP traffic.
           urls: [
             'turn:openrelay.metered.ca:80',
             'turn:openrelay.metered.ca:443',
