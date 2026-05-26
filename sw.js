@@ -3,8 +3,6 @@
    Handles Web Push notifications when the app is backgrounded
    ============================================================ */
 
-const CACHE_NAME = 'bmb-v1';
-
 // Install: activate immediately
 self.addEventListener('install', () => self.skipWaiting());
 

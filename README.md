@@ -85,7 +85,7 @@ Web Push requires a server to POST to the push endpoint — normally browsers ca
 ## Privacy & Security
 
 - **No backend server** — audio travels directly device-to-device via WebRTC.
-- **PeerJS Cloud** is used only to exchange the initial WebRTC handshake. That handshake data is encrypted with AES-GCM (256-bit) using a key derived from your Secret Password via PBKDF2 (200 000 iterations).
+- **PeerJS Cloud** is used only to exchange the initial WebRTC handshake. That handshake data is encrypted with AES-GCM (256-bit) using a key derived from your Secret Password via PBKDF2 (600 000 iterations).
 - **Your audio never touches any server.**
 - **VAPID keys** are generated once in your browser and stored in `localStorage`. They are never sent anywhere.
 - **Secret Password** is never stored and never leaves your device.
