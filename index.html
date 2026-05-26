@@ -308,7 +308,7 @@
         Tap "Start Listening" to subscribe.
       </p>
       <p class="hint" style="margin-top:6px">
-        For best background alerts: install as PWA (tap the three-dot menu (⋮) → Add to Home Screen) and disable battery optimization for Chrome in Android system settings.
+        For best background alerts: install as PWA (tap the browser menu — the three vertical dots (⋮) — then Add to Home Screen) and disable battery optimization for Chrome in Android system settings.
       </p>
     </div>
 
@@ -473,6 +473,7 @@ async function makeVAPIDJWT(audience, privateKeyB64u) {
   const header  = strToB64u(JSON.stringify({ alg: 'ES256', typ: 'JWT' }));
   const payload = strToB64u(JSON.stringify({
     aud: audience,
+    // JWT expires in 12 hours (43,200 seconds).
     exp: Math.floor(Date.now() / 1000) + 43200,
     sub: 'https://github.com/goozdev/baby-monitor-bridge',
   }));
@@ -566,10 +567,11 @@ function makePeer(id) {
         { urls: 'stun:stun2.l.google.com:19302' },
         { urls: 'stun:stun.cloudflare.com:3478'  },
         {
-          // Configure all three relays: port 80 helps on restrictive networks,
-          // the plain 443 entry lets the browser try the default TURN
-          // transport on 443 (typically UDP), and the TCP-specific 443 entry
-          // helps when carriers or firewalls only permit relayed TCP traffic.
+          // Configure three relay URL variants for the same Open Relay server:
+          // port 80 helps on restrictive networks, the plain 443 entry lets
+          // the browser try the default TURN transport on 443 (typically UDP),
+          // and the TCP-specific 443 entry helps when carriers or firewalls
+          // only permit relayed TCP traffic.
           urls: [
             'turn:openrelay.metered.ca:80',
             'turn:openrelay.metered.ca:443',
@@ -1084,7 +1086,16 @@ function addLogEntry(icon, desc) {
   const time  = new Date().toLocaleTimeString();
   const entry = document.createElement('div');
   entry.className = 'log-entry';
-  entry.innerHTML = `<span class="log-time">${time}</span><span class="log-icon">${icon}</span><span class="log-desc">${desc}</span>`;
+  const timeEl = document.createElement('span');
+  timeEl.className = 'log-time';
+  timeEl.textContent = time;
+  const iconEl = document.createElement('span');
+  iconEl.className = 'log-icon';
+  iconEl.textContent = icon;
+  const descEl = document.createElement('span');
+  descEl.className = 'log-desc';
+  descEl.textContent = desc;
+  entry.append(timeEl, iconEl, descEl);
   log.insertBefore(entry, log.firstChild);
 
   // Cap log at 30 entries
