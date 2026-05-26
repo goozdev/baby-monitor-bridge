@@ -308,7 +308,7 @@
         Tap "Start Listening" to subscribe.
       </p>
       <p class="hint" style="margin-top:6px">
-        For best background alerts: install as PWA (tap ⋮ → Add to Home Screen) and disable battery optimization for Chrome in Android settings.
+        For best background alerts: install as PWA (tap the three-dot menu (⋮) → Add to Home Screen) and disable battery optimization for Chrome in Android settings.
       </p>
     </div>
 
@@ -566,6 +566,9 @@ function makePeer(id) {
         { urls: 'stun:stun2.l.google.com:19302' },
         { urls: 'stun:stun.cloudflare.com:3478'  },
         {
+          // Keep both 443 entries: one lets the browser try the default TURN
+          // transport on 443, the other explicitly offers TCP when carriers
+          // or firewalls only permit relayed TCP traffic.
           urls: [
             'turn:openrelay.metered.ca:80',
             'turn:openrelay.metered.ca:443',
