@@ -277,6 +277,7 @@
       </div>
       <div id="streaming-badge" class="streaming-badge" style="display:none">🔴 STREAMING</div>
       <div id="wakelock-indicator"></div>
+      <p class="hint">💡 Battery tip: lower screen brightness while monitoring.</p>
       <div class="btn-row">
         <button id="btn-start-monitoring" class="btn btn-primary">▶ Start Monitoring</button>
         <button id="btn-stop-monitoring"  class="btn btn-secondary" disabled>■ Stop</button>
@@ -709,7 +710,7 @@ function startVOX() {
   const data = new Uint8Array(S.analyser.frequencyBinCount);
 
   function loop() {
-    if (!S.isMonitoring) return;
+    if (!S.isMonitoring) { clearInterval(S.rafId); S.rafId = null; return; }
 
     S.analyser.getByteFrequencyData(data);
     const avg = data.reduce((acc, v) => acc + v, 0) / data.length;
@@ -739,10 +740,9 @@ function startVOX() {
       }
     }
 
-    S.rafId = requestAnimationFrame(loop);
   }
 
-  S.rafId = requestAnimationFrame(loop);
+  S.rafId = setInterval(loop, 150);
 }
 
 async function startStreaming() {
@@ -800,7 +800,7 @@ async function stopSender() {
   S.isMonitoring = false;
   stopStreaming();
 
-  if (S.rafId) { cancelAnimationFrame(S.rafId); S.rafId = null; }
+  if (S.rafId) { clearInterval(S.rafId); S.rafId = null; }
   if (S.triggerTimer) { clearTimeout(S.triggerTimer); S.triggerTimer = null; }
   if (S.silenceTimer) { clearTimeout(S.silenceTimer); S.silenceTimer = null; }
 
