@@ -346,7 +346,7 @@
 
 <!-- Debug footer: version + copy logs -->
 <div id="debug-footer">
-  <span class="version-label" id="version-label">v2026-06-26 · 0000000</span>
+  <span class="version-label" id="version-label">v2026-06-26 · 31542e4</span>
   <button id="btn-copy-logs">📋 Copy Debug Logs</button>
 </div>
 
@@ -359,7 +359,7 @@
 /* ============================================================
    Constants
    ============================================================ */
-const APP_VERSION      = 'v2026-06-26 · 0000000';
+const APP_VERSION      = 'v2026-06-26 · 31542e4';
 const SALT_STR         = 'baby-monitor-bridge-v1';
 const PBKDF2_ITER      = 600_000;  // OWASP-recommended minimum for PBKDF2-SHA256
 const VOX_TRIGGER_MS   = 1500;    // noise must exceed threshold for this long
@@ -896,7 +896,7 @@ document.addEventListener('visibilitychange', () => {
     if (S.peer.disconnected) {
       dbg('Page visible — reconnecting peer after background suspend');
       S.peer.reconnect();
-    } else if (!S.senderConn || S.senderConn.peerConnection?.connectionState === 'failed') {
+    } else if (!S.senderConn || ['failed', 'disconnected', 'closed'].includes(S.senderConn.peerConnection?.connectionState)) {
       dbg('Page visible — re-connecting data channel to sender');
       connectToSender();
     }
