@@ -346,7 +346,7 @@
 
 <!-- Debug footer: version + copy logs -->
 <div id="debug-footer">
-  <span class="version-label" id="version-label">v2026-06-26 · 0000000</span>
+  <span class="version-label" id="version-label">v2026-06-26 · 3dffa34</span>
   <button id="btn-copy-logs">📋 Copy Debug Logs</button>
 </div>
 
@@ -359,7 +359,7 @@
 /* ============================================================
    Constants
    ============================================================ */
-const APP_VERSION      = 'v2026-06-26 · 0000000';
+const APP_VERSION      = 'v2026-06-26 · 3dffa34';
 const SALT_STR         = 'baby-monitor-bridge-v1';
 const PBKDF2_ITER      = 600_000;  // OWASP-recommended minimum for PBKDF2-SHA256
 const VOX_TRIGGER_MS   = 1500;    // noise must exceed threshold for this long
@@ -368,7 +368,7 @@ const FFT_SIZE         = 256;
 const PEER_PREFIX      = 'bmb';
 const RECONNECT_DELAY  = 5000;
 const ID_RETRY_DELAY   = 5000;  // ms between unavailable-id retries
-const MAX_ID_RETRIES   = 24;    // up to 2 min of retrying (24 × 5 s)
+const MAX_ID_RETRIES   = 24;    // up to ~120 s of retrying (24 × 5 s intervals)
 
 /* ============================================================
    App State
