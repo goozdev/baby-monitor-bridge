@@ -1174,7 +1174,7 @@ const LOG_MAX    = 200;
 function dbg(...args) {
   const line = '[BMB ' + new Date().toISOString() + '] ' + args.map(a => {
     if (a instanceof Error) return a.message + (a.stack ? '\n' + a.stack : '');
-    if (typeof a === 'object') { try { return JSON.stringify(a); } catch (_) {} }
+    if (typeof a === 'object') { try { return JSON.stringify(a); } catch (_) { return '[Unstringifiable Object]'; } }
     return String(a);
   }).join(' ');
   console.log(line);
@@ -1214,7 +1214,10 @@ document.addEventListener('DOMContentLoaded', () => {
       // Fallback: open in a new window so the user can copy manually
       const w = window.open('', '_blank');
       if (w) {
-        w.document.write('<pre style="font-size:12px;white-space:pre-wrap">' + text.replace(/</g, '&lt;') + '</pre>');
+        const pre = w.document.createElement('pre');
+        pre.style.cssText = 'font-size:12px;white-space:pre-wrap';
+        pre.textContent = text;
+        w.document.body.appendChild(pre);
         w.document.close();
       } else {
         toast('Could not copy — please allow clipboard access');
