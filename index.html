@@ -635,7 +635,7 @@ async function initSender() {
     S.isMonitoring = true;
     setBtn('btn-stop-monitoring', false);
     updateReceiverBadge();
-    if (!S.rafId) startVOX();   // guard against duplicate intervals on reconnect
+    if (!S.rafId) startVOX();   // guard against duplicate polling loops on reconnect
     acquireWakeLock();
     senderStatus('green', `Monitoring — ${S.receivers.size} receiver(s)`);
   });
@@ -648,18 +648,14 @@ async function initSender() {
       setBtn('btn-start-monitoring', false);
     } else if (err.type === 'peer-unavailable') {
       // A remote receiver is no longer reachable — find and evict the stale entry.
-      // PeerJS includes the peer ID in the error message ("Could not connect to peer <id>").
-      let removed = false;
-      for (const [pid] of S.receivers) {
-        if (err.message && err.message.includes(pid)) {
-          dbg('Evicting stale receiver:', pid);
-          S.receivers.delete(pid);
-          removed = true;
-          break;
-        }
-      }
-      if (!removed) {
-        // Message format didn't match — evict nothing but log for diagnostics.
+      // PeerJS formats the message as "Could not connect to peer <id>".
+      const match = err.message && err.message.match(/peer (\S+)$/);
+      const stalePid = match && match[1];
+      if (stalePid && S.receivers.has(stalePid)) {
+        dbg('Evicting stale receiver:', stalePid);
+        S.receivers.delete(stalePid);
+      } else {
+        // Message format didn't match — log for diagnostics.
         dbg('peer-unavailable: could not identify stale receiver from message:', err.message);
       }
       updateReceiverBadge();
