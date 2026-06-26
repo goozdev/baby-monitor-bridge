@@ -346,7 +346,7 @@
 
 <!-- Debug footer: version + copy logs -->
 <div id="debug-footer">
-  <span class="version-label" id="version-label">v2026-06-26 · 31542e4</span>
+  <span class="version-label" id="version-label">v2026-06-26 · 0000000</span>
   <button id="btn-copy-logs">📋 Copy Debug Logs</button>
 </div>
 
@@ -359,7 +359,7 @@
 /* ============================================================
    Constants
    ============================================================ */
-const APP_VERSION      = 'v2026-06-26 · 31542e4';
+const APP_VERSION      = 'v2026-06-26 · 0000000';
 const SALT_STR         = 'baby-monitor-bridge-v1';
 const PBKDF2_ITER      = 600_000;  // OWASP-recommended minimum for PBKDF2-SHA256
 const VOX_TRIGGER_MS   = 1500;    // noise must exceed threshold for this long
@@ -367,6 +367,8 @@ const VOX_SILENCE_MS   = 10_000;  // silence must last this long to stop stream
 const FFT_SIZE         = 256;
 const PEER_PREFIX      = 'bmb';
 const RECONNECT_DELAY  = 5000;
+const ID_RETRY_DELAY   = 5000;  // ms between unavailable-id retries
+const MAX_ID_RETRIES   = 24;    // up to 2 min of retrying (24 × 5 s)
 
 /* ============================================================
    App State
@@ -393,6 +395,8 @@ const S = {
   rafId:         null,
   wakeLock:      null,
   vapidKeys:     null,
+  idRetryCount:  0,
+  idRetryTimer:  null,
 
   // Receiver-only
   senderConn:      null,
@@ -655,9 +659,15 @@ async function initSender() {
   senderStatus('yellow', 'Connecting to signalling…');
 
   S.peer = makePeer(peerId);
+  wireSenderPeer(peerId);
+}
 
+/* Attach all PeerJS event listeners to S.peer for a given sender peerId.
+   Called on first connect and on every unavailable-id retry. */
+function wireSenderPeer(peerId) {
   S.peer.on('open', () => {
     dbg('Sender peer open:', peerId);
+    S.idRetryCount = 0;
     S.isMonitoring = true;
     setBtn('btn-stop-monitoring', false);
     updateReceiverBadge();
@@ -669,9 +679,23 @@ async function initSender() {
   S.peer.on('error', (err) => {
     dbg('Sender peer error:', err.type, err.message);
     if (err.type === 'unavailable-id') {
-      toast('Peer ID busy — wait 30 s and retry, or change password');
-      senderStatus('red', 'Error: ' + err.type);
-      setBtn('btn-start-monitoring', false);
+      S.idRetryCount++;
+      if (S.idRetryCount <= MAX_ID_RETRIES) {
+        dbg(`Peer ID busy (attempt ${S.idRetryCount}/${MAX_ID_RETRIES}) — retrying in ${ID_RETRY_DELAY / 1000} s`);
+        senderStatus('yellow', `ID in use — retrying… (${S.idRetryCount}/${MAX_ID_RETRIES})`);
+        if (S.peer && !S.peer.destroyed) { S.peer.destroy(); S.peer = null; }
+        S.idRetryTimer = setTimeout(() => {
+          S.idRetryTimer = null;
+          // stopSender() cancels this timer, so if we reach here the user still wants to connect.
+          S.peer = makePeer(peerId);
+          wireSenderPeer(peerId);
+        }, ID_RETRY_DELAY);
+      } else {
+        S.idRetryCount = 0;
+        toast('Peer ID still busy after retries — try changing your password');
+        senderStatus('red', 'Error: ID still busy');
+        setBtn('btn-start-monitoring', false);
+      }
     } else if (err.type === 'peer-unavailable') {
       // A remote receiver is no longer reachable — find and evict the stale entry.
       // PeerJS formats the message as "Could not connect to peer <id>".
@@ -841,6 +865,9 @@ async function stopSender() {
   dbg('Stopping sender');
   S.isMonitoring = false;
   stopStreaming();
+
+  if (S.idRetryTimer) { clearTimeout(S.idRetryTimer); S.idRetryTimer = null; }
+  S.idRetryCount = 0;
 
   if (S.rafId) { clearInterval(S.rafId); S.rafId = null; }
   if (S.triggerTimer) { clearTimeout(S.triggerTimer); S.triggerTimer = null; }
