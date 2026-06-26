@@ -219,6 +219,25 @@
     .push-status { font-size: .78rem; color: var(--dim); margin-top: 6px; }
     .push-status.ok { color: var(--green); }
     .push-status.warn { color: var(--yellow); }
+
+    /* ── Debug footer ── */
+    #debug-footer {
+      max-width: 480px; margin: 0 auto;
+      padding: 10px 16px max(16px, env(safe-area-inset-bottom));
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 8px; border-top: 1px solid var(--border);
+    }
+    #debug-footer .version-label {
+      font-size: .68rem; color: var(--dim); font-variant-numeric: tabular-nums;
+    }
+    #btn-copy-logs {
+      font-size: .72rem; padding: 5px 10px;
+      background: var(--surface2); color: var(--dim);
+      border: 1px solid var(--border); border-radius: 6px;
+      cursor: pointer; white-space: nowrap;
+      transition: color .15s, border-color .15s;
+    }
+    #btn-copy-logs:hover { color: var(--text); border-color: var(--dim); }
   </style>
 </head>
 <body>
@@ -325,6 +344,12 @@
 
 </div><!-- #app -->
 
+<!-- Debug footer: version + copy logs -->
+<div id="debug-footer">
+  <span class="version-label" id="version-label">v2026-06-26 · 41ca354</span>
+  <button id="btn-copy-logs">📋 Copy Debug Logs</button>
+</div>
+
 <!-- Toast notification -->
 <div id="toast"></div>
 
@@ -334,6 +359,7 @@
 /* ============================================================
    Constants
    ============================================================ */
+const APP_VERSION      = 'v2026-06-26 · 41ca354';
 const SALT_STR         = 'baby-monitor-bridge-v1';
 const PBKDF2_ITER      = 600_000;  // OWASP-recommended minimum for PBKDF2-SHA256
 const VOX_TRIGGER_MS   = 1500;    // noise must exceed threshold for this long
@@ -1139,12 +1165,62 @@ function toast(msg, ms = 3500) {
   setTimeout(() => el.classList.remove('show'), ms);
 }
 
-function dbg(...args) { console.log('[BMB]', ...args); }
+/* ============================================================
+   Debug log buffer
+   ============================================================ */
+const LOG_BUFFER = [];
+const LOG_MAX    = 200;
+
+function dbg(...args) {
+  const line = '[BMB ' + new Date().toISOString() + '] ' + args.map(a => {
+    if (a instanceof Error) return a.message + (a.stack ? '\n' + a.stack : '');
+    if (typeof a === 'object') { try { return JSON.stringify(a); } catch (_) {} }
+    return String(a);
+  }).join(' ');
+  console.log(line);
+  LOG_BUFFER.push(line);
+  if (LOG_BUFFER.length > LOG_MAX) LOG_BUFFER.shift();
+}
+
+window.addEventListener('error', (e) => {
+  dbg('UNCAUGHT ERROR:', e.message, 'at', e.filename + ':' + e.lineno + ':' + e.colno,
+      e.error && e.error.stack ? '\n' + e.error.stack : '');
+});
+
+window.addEventListener('unhandledrejection', (e) => {
+  const reason = e.reason instanceof Error
+    ? e.reason.message + (e.reason.stack ? '\n' + e.reason.stack : '')
+    : String(e.reason);
+  dbg('UNHANDLED REJECTION:', reason);
+});
 
 /* ============================================================
    Event wiring
    ============================================================ */
 document.addEventListener('DOMContentLoaded', () => {
+
+  // Version label
+  const vLabel = qs('#version-label');
+  if (vLabel) vLabel.textContent = APP_VERSION;
+
+  // Copy debug logs
+  qs('#btn-copy-logs').addEventListener('click', async () => {
+    const header = `Baby Monitor Bridge ${APP_VERSION}\nUser-Agent: ${navigator.userAgent}\n${'─'.repeat(60)}\n`;
+    const text   = header + (LOG_BUFFER.length ? LOG_BUFFER.join('\n') : '(no log entries yet)');
+    try {
+      await navigator.clipboard.writeText(text);
+      toast('Debug logs copied to clipboard ✓');
+    } catch (_) {
+      // Fallback: open in a new window so the user can copy manually
+      const w = window.open('', '_blank');
+      if (w) {
+        w.document.write('<pre style="font-size:12px;white-space:pre-wrap">' + text.replace(/</g, '&lt;') + '</pre>');
+        w.document.close();
+      } else {
+        toast('Could not copy — please allow clipboard access');
+      }
+    }
+  });
 
   // Password sync
   qs('#password').addEventListener('input', (e) => { S.password = e.target.value.trim(); });
