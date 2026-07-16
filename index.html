@@ -152,6 +152,12 @@
     .btn-secondary { background: var(--surface2); color: var(--text); border: 1.5px solid var(--border); }
     .btn-danger    { background: var(--red); color: #fff; }
     .btn-green     { background: var(--green); color: #fff; }
+    .btn-talkback  {
+      background: var(--surface2); color: var(--text);
+      border: 1.5px solid var(--border);
+      user-select: none; -webkit-user-select: none; touch-action: none;
+    }
+    .btn-talkback.speaking { background: var(--red); color: #fff; border-color: var(--red); }
 
     /* ── Status row ── */
     .status-row {
@@ -175,6 +181,14 @@
       animation: pulse 1s infinite; margin-bottom: 10px;
     }
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.55} }
+
+    /* ── Talkback indicator (sender) ── */
+    #talkback-indicator {
+      display: none; align-items: center; gap: 6px;
+      padding: 4px 12px; background: #1d4ed8;
+      border-radius: 20px; font-size: .78rem; font-weight: 600;
+      animation: pulse 1s infinite; margin-bottom: 10px;
+    }
 
     /* ── Receiver count badge ── */
     .rx-badge {
@@ -295,6 +309,7 @@
         <span id="rx-count" class="rx-badge" style="margin-left:auto;display:none">0</span>
       </div>
       <div id="streaming-badge" class="streaming-badge" style="display:none">🔴 STREAMING</div>
+      <div id="talkback-indicator">📣 Parent speaking…</div>
       <div id="wakelock-indicator"></div>
       <p class="hint">💡 Battery tip: lower screen brightness while monitoring.</p>
       <div class="btn-row">
@@ -302,6 +317,8 @@
         <button id="btn-stop-monitoring"  class="btn btn-secondary" disabled>■ Stop</button>
       </div>
     </div>
+    <!-- Hidden audio element — plays talkback from receiver -->
+    <audio id="talkback-audio" playsinline autoplay></audio>
   </div>
 
   <!-- ═══════════════ RECEIVER PANEL ═══════════════ -->
@@ -317,6 +334,10 @@
         <button id="btn-start-listening" class="btn btn-green">👂 Start Listening</button>
         <button id="btn-stop-listening"  class="btn btn-secondary" disabled>■ Stop</button>
       </div>
+      <div class="btn-row" style="margin-top:6px">
+        <button id="btn-talkback" class="btn btn-talkback" disabled>🎤 Hold to Speak</button>
+      </div>
+      <p class="hint" style="margin-top:6px">Hold the button to talk back — audio plays on the sender device.</p>
     </div>
 
     <!-- Push notification status -->
@@ -346,7 +367,7 @@
 
 <!-- Debug footer: version + copy logs -->
 <div id="debug-footer">
-  <span class="version-label" id="version-label">v2026-06-26 · d4b6733</span>
+  <span class="version-label" id="version-label">v2026-07-16 · 0000000</span>
   <button id="btn-copy-logs">📋 Copy Debug Logs</button>
 </div>
 
@@ -359,7 +380,7 @@
 /* ============================================================
    Constants
    ============================================================ */
-const APP_VERSION      = 'v2026-06-26 · d4b6733';
+const APP_VERSION      = 'v2026-07-16 · 0000000';
 const SALT_STR         = 'baby-monitor-bridge-v1';
 const PBKDF2_ITER      = 600_000;  // OWASP-recommended minimum for PBKDF2-SHA256
 const VOX_TRIGGER_MS   = 1500;    // noise must exceed threshold for this long
@@ -397,12 +418,17 @@ const S = {
   vapidKeys:     null,
   idRetryCount:  0,
   idRetryTimer:  null,
+  isTalkbackActive: false,   // true while a receiver is speaking back
+  talkbackAudioConn: null,   // incoming talkback media call
 
   // Receiver-only
   senderConn:      null,
   senderMediaConn: null,
   senderPeerId:    null,
   reconnectTimer:  null,
+  isSpeaking:    false,      // true while hold-to-speak is active
+  talkMicStream: null,       // mic stream for speak-back
+  talkMediaConn: null,       // outgoing call to sender during speak-back
 };
 
 /* ============================================================
@@ -722,6 +748,48 @@ function wireSenderPeer(peerId) {
     setupReceiverDataConn(conn);
   });
 
+  S.peer.on('call', (call) => {
+    // Accept talkback calls only from known, connected receivers
+    if (!S.receivers.has(call.peer)) {
+      dbg('Rejected talkback from unknown peer:', call.peer);
+      call.close();
+      return;
+    }
+    dbg('Incoming talkback from receiver:', call.peer);
+    // Close any previous talkback before accepting the new one
+    if (S.talkbackAudioConn) {
+      S.talkbackAudioConn.close();
+      S.talkbackAudioConn = null;
+    }
+    S.talkbackAudioConn = call;
+    S.isTalkbackActive = true;
+    call.answer(); // no audio sent back to the receiver
+    qs('#talkback-indicator').style.display = 'flex';
+
+    call.on('stream', (remoteStream) => {
+      dbg('Talkback stream received');
+      const audio = qs('#talkback-audio');
+      audio.srcObject = remoteStream;
+      audio.play().catch(e => dbg('Talkback audio play error:', e.message));
+    });
+
+    call.on('close', () => {
+      dbg('Talkback call closed');
+      S.isTalkbackActive = false;
+      S.talkbackAudioConn = null;
+      const audio = qs('#talkback-audio');
+      if (audio) audio.srcObject = null;
+      qs('#talkback-indicator').style.display = 'none';
+    });
+
+    call.on('error', (e) => {
+      dbg('Talkback call error:', e.message);
+      S.isTalkbackActive = false;
+      S.talkbackAudioConn = null;
+      qs('#talkback-indicator').style.display = 'none';
+    });
+  });
+
   S.peer.on('disconnected', () => {
     dbg('Peer disconnected — reconnecting…');
     if (S.peer && !S.peer.destroyed) S.peer.reconnect();
@@ -789,7 +857,7 @@ function startVOX() {
     if (S.currentLevel > thresh) {
       // ── Above threshold ──
       if (S.silenceTimer) { clearTimeout(S.silenceTimer); S.silenceTimer = null; }
-      if (!S.isStreaming && !S.triggerTimer) {
+      if (!S.isStreaming && !S.triggerTimer && !S.isTalkbackActive) {
         S.triggerTimer = setTimeout(() => {
           S.triggerTimer = null;
           if (!S.isStreaming) startStreaming();
@@ -872,6 +940,12 @@ async function stopSender() {
   if (S.rafId) { clearInterval(S.rafId); S.rafId = null; }
   if (S.triggerTimer) { clearTimeout(S.triggerTimer); S.triggerTimer = null; }
   if (S.silenceTimer) { clearTimeout(S.silenceTimer); S.silenceTimer = null; }
+
+  if (S.talkbackAudioConn) { S.talkbackAudioConn.close(); S.talkbackAudioConn = null; }
+  S.isTalkbackActive = false;
+  const talkbackAudio = qs('#talkback-audio');
+  if (talkbackAudio) talkbackAudio.srcObject = null;
+  qs('#talkback-indicator').style.display = 'none';
 
   if (S.peer) { S.peer.destroy(); S.peer = null; }
   S.receivers.clear();
@@ -1097,8 +1171,47 @@ function handleAlert(msg) {
   }
 }
 
+async function startTalkback() {
+  if (S.isSpeaking || !S.senderPeerId || !S.peer || S.peer.destroyed) return;
+  dbg('Talkback: requesting microphone');
+  try {
+    S.talkMicStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+      video: false,
+    });
+  } catch (e) {
+    toast('Microphone denied: ' + e.message);
+    return;
+  }
+  S.isSpeaking = true;
+  const btn = qs('#btn-talkback');
+  btn.classList.add('speaking');
+  btn.textContent = '🔴 Speaking…';
+
+  S.talkMediaConn = S.peer.call(S.senderPeerId, S.talkMicStream);
+  S.talkMediaConn.on('error', (e) => { dbg('Talkback call error:', e.message); stopTalkback(); });
+  S.talkMediaConn.on('close', () => { if (S.isSpeaking) stopTalkback(); });
+  dbg('Talkback call opened to sender');
+}
+
+function stopTalkback() {
+  if (!S.isSpeaking) return;
+  dbg('Talkback: stopping');
+  S.isSpeaking = false;
+  if (S.talkMicStream) { S.talkMicStream.getTracks().forEach(t => t.stop()); S.talkMicStream = null; }
+  if (S.talkMediaConn) { S.talkMediaConn.close(); S.talkMediaConn = null; }
+  const btn = qs('#btn-talkback');
+  btn.classList.remove('speaking');
+  btn.textContent = '🎤 Hold to Speak';
+}
+
 async function stopReceiver() {
   dbg('Stopping receiver');
+  stopTalkback();
   if (S.reconnectTimer) { clearTimeout(S.reconnectTimer); S.reconnectTimer = null; }
   if (S.senderConn)      { S.senderConn.close();      S.senderConn = null; }
   if (S.senderMediaConn) { S.senderMediaConn.close(); S.senderMediaConn = null; }
@@ -1175,6 +1288,7 @@ function updateReceiverBtns(state) {
   // state: 'idle' | 'connecting' | 'connected'
   setBtn('btn-start-listening', state !== 'idle');
   setBtn('btn-stop-listening',  state !== 'connected');
+  setBtn('btn-talkback',        state !== 'connected');
 }
 
 function addLogEntry(icon, desc) {
@@ -1291,6 +1405,15 @@ document.addEventListener('DOMContentLoaded', () => {
     initReceiver();
   });
   qs('#btn-stop-listening').addEventListener('click', stopReceiver);
+
+  // Talkback hold-to-speak button
+  const talkBtn = qs('#btn-talkback');
+  talkBtn.addEventListener('mousedown',   startTalkback);
+  talkBtn.addEventListener('touchstart',  (e) => { e.preventDefault(); startTalkback(); }, { passive: false }); // preventDefault stops the subsequent mousedown on mobile
+  talkBtn.addEventListener('mouseup',     stopTalkback);
+  talkBtn.addEventListener('mouseleave',  stopTalkback);
+  talkBtn.addEventListener('touchend',    stopTalkback);
+  talkBtn.addEventListener('touchcancel', stopTalkback);
 
   // Resume AudioContext on any tap (mobile autoplay policy)
   document.addEventListener('click', () => {
