@@ -1040,7 +1040,7 @@ async function initBattery() {
     renderBattery(batt);
     batt.addEventListener('levelchange',   () => renderBattery(batt));
     batt.addEventListener('chargingchange', () => renderBattery(batt));
-    dbg('Battery API initialised — level:', Math.round(batt.level * 100) + '%');
+    dbg('Battery API initialized — level:', Math.round(batt.level * 100) + '%');
   } catch (e) {
     dbg('Battery API error:', e.message);
   }
