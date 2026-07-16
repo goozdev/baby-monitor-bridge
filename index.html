@@ -229,6 +229,38 @@
       font-size: .72rem; color: var(--dim); text-align: center; margin-top: 6px;
     }
 
+    /* ── Battery indicator ── */
+    .battery-row {
+      display: flex; align-items: center; gap: 8px; margin-top: 7px;
+    }
+    .battery-shell {
+      position: relative;
+      display: inline-flex; align-items: center;
+      width: 30px; height: 14px;
+      border: 2px solid var(--dim);
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+    .battery-shell::after {
+      content: '';
+      position: absolute; right: -5px; top: 50%;
+      transform: translateY(-50%);
+      width: 3px; height: 7px;
+      background: var(--dim); border-radius: 0 2px 2px 0;
+    }
+    .battery-fill {
+      position: absolute; left: 1px; top: 1px; bottom: 1px;
+      border-radius: 1px;
+      transition: width .4s ease, background .4s ease;
+    }
+    .battery-text {
+      font-size: .72rem; font-variant-numeric: tabular-nums;
+      transition: color .4s ease;
+    }
+    .battery-charging-icon {
+      font-size: .72rem;
+    }
+
     /* ── Push status ── */
     .push-status { font-size: .78rem; color: var(--dim); margin-top: 6px; }
     .push-status.ok { color: var(--green); }
@@ -311,6 +343,11 @@
       <div id="streaming-badge" class="streaming-badge" style="display:none">🔴 STREAMING</div>
       <div id="talkback-indicator">📣 Parent speaking…</div>
       <div id="wakelock-indicator"></div>
+      <div id="battery-sender" class="battery-row" style="display:none">
+        <div class="battery-shell"><div class="battery-fill" id="battery-fill-sender"></div></div>
+        <span class="battery-text" id="battery-text-sender"></span>
+        <span class="battery-charging-icon" id="battery-charge-sender"></span>
+      </div>
       <p class="hint">💡 Battery tip: lower screen brightness while monitoring.</p>
       <div class="btn-row">
         <button id="btn-start-monitoring" class="btn btn-primary">▶ Start Monitoring</button>
@@ -333,6 +370,11 @@
       <div class="btn-row">
         <button id="btn-start-listening" class="btn btn-green">👂 Start Listening</button>
         <button id="btn-stop-listening"  class="btn btn-secondary" disabled>■ Stop</button>
+      </div>
+      <div id="battery-receiver" class="battery-row" style="display:none">
+        <div class="battery-shell"><div class="battery-fill" id="battery-fill-receiver"></div></div>
+        <span class="battery-text" id="battery-text-receiver"></span>
+        <span class="battery-charging-icon" id="battery-charge-receiver"></span>
       </div>
       <div class="btn-row" style="margin-top:6px">
         <button id="btn-talkback" class="btn btn-talkback" disabled>🎤 Hold to Speak</button>
@@ -987,6 +1029,46 @@ function releaseWakeLock() {
   qs('#wakelock-indicator').textContent = '';
 }
 
+/* ── Battery Status API ── */
+async function initBattery() {
+  if (!('getBattery' in navigator)) {
+    dbg('Battery Status API not supported');
+    return;
+  }
+  try {
+    const batt = await navigator.getBattery();
+    renderBattery(batt);
+    batt.addEventListener('levelchange',   () => renderBattery(batt));
+    batt.addEventListener('chargingchange', () => renderBattery(batt));
+    dbg('Battery API initialised — level:', Math.round(batt.level * 100) + '%');
+  } catch (e) {
+    dbg('Battery API error:', e.message);
+  }
+}
+
+function renderBattery(batt) {
+  const level    = Math.round(batt.level * 100);
+  const charging = batt.charging;
+  const fillPct  = level + '%';
+  const color    = level > 50 ? 'var(--green)' : level > 20 ? 'var(--yellow)' : 'var(--red)';
+  const labelTxt = level + '%';
+  const chargeEl = charging ? '⚡' : '';
+
+  for (const suffix of ['sender', 'receiver']) {
+    const row    = qs('#battery-' + suffix);
+    const fill   = qs('#battery-fill-' + suffix);
+    const label  = qs('#battery-text-' + suffix);
+    const charge = qs('#battery-charge-' + suffix);
+    if (!row) continue;
+    row.style.display   = 'flex';
+    fill.style.width    = fillPct;
+    fill.style.background = color;
+    label.style.color   = color;
+    label.textContent   = labelTxt;
+    charge.textContent  = chargeEl;
+  }
+}
+
 /* ── Re-acquire wake lock / heal receiver peer when page becomes visible again ── */
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
@@ -1422,6 +1504,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Initialize level meter marker at default threshold position
   updateLevelMeter(0);
+
+  // Battery level indicator
+  initBattery();
 });
 </script>
 </body>
