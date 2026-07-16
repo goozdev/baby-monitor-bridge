@@ -250,6 +250,7 @@
     }
     .battery-fill {
       position: absolute; left: 1px; top: 1px; bottom: 1px;
+      max-width: calc(100% - 2px);
       border-radius: 1px;
       transition: width .4s ease, background .4s ease;
     }
@@ -409,7 +410,7 @@
 
 <!-- Debug footer: version + copy logs -->
 <div id="debug-footer">
-  <span class="version-label" id="version-label">v2026-07-16 · 3a92a4a</span>
+  <span class="version-label" id="version-label">v2026-07-16 · 0000000</span>
   <button id="btn-copy-logs">📋 Copy Debug Logs</button>
 </div>
 
@@ -422,7 +423,7 @@
 /* ============================================================
    Constants
    ============================================================ */
-const APP_VERSION      = 'v2026-07-16 · 3a92a4a';
+const APP_VERSION      = 'v2026-07-16 · 0000000';
 const SALT_STR         = 'baby-monitor-bridge-v1';
 const PBKDF2_ITER      = 600_000;  // OWASP-recommended minimum for PBKDF2-SHA256
 const VOX_TRIGGER_MS   = 1500;    // noise must exceed threshold for this long
@@ -817,6 +818,7 @@ function wireSenderPeer(peerId) {
 
     call.on('close', () => {
       dbg('Talkback call closed');
+      if (S.talkbackAudioConn !== call) return; // stale handler — a newer call is already active
       S.isTalkbackActive = false;
       S.talkbackAudioConn = null;
       const audio = qs('#talkback-audio');
@@ -826,8 +828,11 @@ function wireSenderPeer(peerId) {
 
     call.on('error', (e) => {
       dbg('Talkback call error:', e.message);
+      if (S.talkbackAudioConn !== call) return; // stale handler — a newer call is already active
       S.isTalkbackActive = false;
       S.talkbackAudioConn = null;
+      const audio = qs('#talkback-audio');
+      if (audio) audio.srcObject = null;
       qs('#talkback-indicator').style.display = 'none';
     });
   });
@@ -1496,6 +1501,9 @@ document.addEventListener('DOMContentLoaded', () => {
   talkBtn.addEventListener('mouseleave',  stopTalkback);
   talkBtn.addEventListener('touchend',    stopTalkback);
   talkBtn.addEventListener('touchcancel', stopTalkback);
+  talkBtn.addEventListener('keydown',     (e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); startTalkback(); } });
+  talkBtn.addEventListener('keyup',       (e) => { if (e.key === ' ' || e.key === 'Enter') stopTalkback(); });
+  talkBtn.addEventListener('blur',        stopTalkback);
 
   // Resume AudioContext on any tap (mobile autoplay policy)
   document.addEventListener('click', () => {
