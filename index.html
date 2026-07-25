@@ -482,7 +482,7 @@
 
 <!-- Debug footer: version + copy logs -->
 <div id="debug-footer">
-  <span class="version-label" id="version-label">v2026-07-25 · 739fb26</span>
+  <span class="version-label" id="version-label">v2026-07-25 · 0000000</span>
   <button id="btn-copy-logs">📋 Copy Debug Logs</button>
 </div>
 
@@ -505,7 +505,7 @@ const {
 /* ============================================================
    Constants
    ============================================================ */
-const APP_VERSION      = 'v2026-07-25 · 739fb26';
+const APP_VERSION      = 'v2026-07-25 · 0000000';
 const SALT_STR         = 'baby-monitor-bridge-v1';
 const PBKDF2_ITER      = 600_000;  // OWASP-recommended minimum for PBKDF2-SHA256
 const VOX_TRIGGER_MS   = 1500;    // noise must exceed threshold for this long
@@ -931,6 +931,17 @@ function clearReceiverHeartbeatTimers() {
   }
 }
 
+function setReceiverOfflineState(reason, opts = {}) {
+  clearReceiverReconnectTimer();
+  clearReceiverHeartbeatTimers();
+  setReceiverState(RECEIVER_STATES.DISCONNECTED, 'Offline — waiting for network', {
+    reason,
+    note: opts.note || 'Network is offline. Monitoring intent is preserved and reconnect resumes automatically when online.',
+    error: opts.error ?? reason,
+    silent: !!opts.silent,
+  });
+}
+
 function clearSenderConnection(reason = 'reset') {
   if (S.senderConn) {
     S.senderConn.onopen = null;
@@ -1005,11 +1016,7 @@ function scheduleReconnect(reason, opts = {}) {
   if (!S.receiverShouldRun) return;
   if (!S.peer || S.peer.destroyed) return;
   if (!navigator.onLine) {
-    setReceiverState(RECEIVER_STATES.DISCONNECTED, 'Offline — waiting for network', {
-      reason,
-      note: 'Network is offline. Monitoring intent is preserved and reconnect resumes automatically when online.',
-      error: reason,
-    });
+    setReceiverOfflineState(reason, { error: reason });
     return;
   }
 
@@ -1532,11 +1539,7 @@ window.addEventListener('online', () => {
 
 window.addEventListener('offline', () => {
   if (S.mode === 'receiver' && S.receiverShouldRun) {
-    clearReceiverHeartbeatTimers();
-    setReceiverState(RECEIVER_STATES.DISCONNECTED, 'Offline — waiting for network', {
-      reason: 'network-offline',
-      error: 'offline',
-    });
+    setReceiverOfflineState('network-offline', { error: 'offline' });
   }
 });
 
