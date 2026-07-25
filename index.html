@@ -482,7 +482,7 @@
 
 <!-- Debug footer: version + copy logs -->
 <div id="debug-footer">
-  <span class="version-label" id="version-label">v2026-07-25 · 0000000</span>
+  <span class="version-label" id="version-label">v2026-07-25 · f372fcb</span>
   <button id="btn-copy-logs">📋 Copy Debug Logs</button>
 </div>
 
@@ -505,7 +505,7 @@ const {
 /* ============================================================
    Constants
    ============================================================ */
-const APP_VERSION      = 'v2026-07-25 · 0000000';
+const APP_VERSION      = 'v2026-07-25 · f372fcb';
 const SALT_STR         = 'baby-monitor-bridge-v1';
 const PBKDF2_ITER      = 600_000;  // OWASP-recommended minimum for PBKDF2-SHA256
 const VOX_TRIGGER_MS   = 1500;    // noise must exceed threshold for this long
@@ -1687,7 +1687,7 @@ function connectToSender(reason = 'connect') {
   S.senderConn = S.peer.connect(S.senderPeerId, { reliable: true, serialization: 'raw' });
 
   S.senderConn.on('open', () => {
-    if (token !== S.receiverConnToken) return;
+    if (token !== S.receiverConnToken || !S.receiverShouldRun) return;
     S.reconnectInFlight = false;
     clearReceiverReconnectTimer();
     S.receiverLastStableAt = Date.now();
@@ -1698,7 +1698,7 @@ function connectToSender(reason = 'connect') {
   });
 
   S.senderConn.on('data', async (raw) => {
-    if (token !== S.receiverConnToken) return;
+    if (token !== S.receiverConnToken || !S.receiverShouldRun) return;
     try {
       const msg = await decrypt(raw);
       await handleSenderMsg(msg);
@@ -1708,13 +1708,13 @@ function connectToSender(reason = 'connect') {
   });
 
   S.senderConn.on('close', () => {
-    if (token !== S.receiverConnToken) return;
+    if (token !== S.receiverConnToken || !S.receiverShouldRun) return;
     S.reconnectInFlight = false;
     scheduleReconnect('data-close', { force: true });
   });
 
   S.senderConn.on('error', (err) => {
-    if (token !== S.receiverConnToken) return;
+    if (token !== S.receiverConnToken || !S.receiverShouldRun) return;
     S.reconnectInFlight = false;
     S.receiverLastError = err.message || 'sender-conn-error';
     updateReceiverDiagnostics();
