@@ -19,6 +19,7 @@ Everything travels **peer-to-peer, encrypted end-to-end**, through WebRTC.
 | **Push notifications** | Web Push via your own locally-generated VAPID keys |
 | **Vibration** | Hardware vibration on every alert |
 | **Wake Lock** | Sender screen stays on — CPU never sleeps |
+| **Receiver self-healing** | Heartbeats + reconnect backoff keep retry intent until you stop listening |
 | **Dark mode** | OLED-friendly black UI |
 | **PWA** | Add to home screen for better background behaviour |
 
@@ -55,6 +56,8 @@ The password is never transmitted; it is only used locally to encrypt/decrypt si
    - Live audio (starts within a second or two)
    - An in-app alert + hardware vibration
    - A Web Push notification (works in background on Android Chrome)
+6. The Receiver screen shows **Sender battery** as the primary battery indicator.
+   Your current phone battery is shown separately as **This device**.
 
 Multiple receivers can be connected at the same time.
 
@@ -79,6 +82,24 @@ Web Push requires a server to POST to the push endpoint — normally browsers ca
 - For **true background push** (screen off, app closed), the Sender attempts to POST directly to the Receiver's push endpoint. Whether this succeeds depends on your browser and push service's CORS policy. For best results:
   - Install the app on your Android home screen (three-dot menu → *Add to Home Screen*).
   - Keep the app pinned / excluded from battery optimisation in Android settings.
+
+## Receiver continuity: what is guaranteed vs best-effort
+
+- **Guaranteed by app logic:** once you tap **Start Listening**, the receiver keeps its *intent to monitor* until you tap **Stop** or close the app. It continuously retries signalling/data reconnects with bounded backoff, and it forces a health check when the app becomes visible or network returns.
+- **Best-effort only:** live WebRTC audio continuity while Android/browser keeps the page runnable in background.
+- **Not guaranteed in pure web mode:** uninterrupted monitoring through screen-off, long background suspension, Doze, OEM task killers, or browsers that block background timers/networking.
+
+### Manual validation matrix
+
+| Scenario | Expected behaviour | Caveat |
+|---|---|---|
+| Android foreground active | Receiver stays **Live** and reconnects if signalling blips | Short reconnects may still mute audio briefly |
+| Android app backgrounded briefly | Receiver may show **Background-limited** then fast-recover on resume | Browser may suspend timers while hidden |
+| Screen off / standby | Push/vibration may still wake user | Continuous live audio is not guaranteed in web runtime |
+| Network flap (Wi‑Fi ↔ LTE) | Receiver should move to reconnecting/degraded and retry automatically | Recovery speed depends on carrier/browser |
+| Sender app restart | Receiver retries until sender returns | Push delivery still depends on push endpoint/CORS |
+| Receiver tab/app task switch | Receiver retains monitoring intent and checks health on return | Backgrounded WebRTC can be dropped by OS |
+| Long idle then resume | Diagnostics should show stale heartbeat then reconnect | Resume depends on browser resuming the page |
 
 ---
 
@@ -114,4 +135,3 @@ iOS Safari does not support the Wake Lock API and has limited Web Push support. 
 - **Web Crypto API** — AES-GCM encryption, PBKDF2 key derivation, ECDSA VAPID signing
 - **Web Push API + Service Worker** — background push notifications
 - **Wake Lock API** — prevent Sender device from sleeping
-

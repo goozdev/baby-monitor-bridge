@@ -172,6 +172,18 @@
     .dot.yellow { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); animation: blink .9s infinite; }
     @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
     .status-text { font-size: .88rem; color: var(--dim); }
+    .status-badge {
+      display: inline-flex; align-items: center;
+      padding: 4px 10px; border-radius: 999px;
+      font-size: .74rem; font-weight: 700;
+      border: 1px solid var(--border);
+      margin: 4px 0 8px;
+    }
+    .state-live { background: rgba(34, 197, 94, .12); color: var(--green); }
+    .state-connecting, .state-reconnecting { background: rgba(250, 204, 21, .12); color: var(--yellow); }
+    .state-degraded_background, .state-disconnected { background: rgba(249, 115, 22, .12); color: var(--accent); }
+    .state-idle, .state-stopped_by_user { background: rgba(156, 163, 175, .12); color: var(--dim); }
+    .receiver-note { font-size: .76rem; color: var(--dim); margin-top: 2px; }
 
     /* ── Streaming badge ── */
     .streaming-badge {
@@ -230,6 +242,17 @@
     }
 
     /* ── Battery indicator ── */
+    .battery-panel { margin-top: 8px; }
+    .battery-meta {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 8px; margin-bottom: 4px;
+    }
+    .battery-label {
+      font-size: .72rem; color: var(--dim); text-transform: uppercase; letter-spacing: .05em;
+    }
+    .battery-warning {
+      font-size: .72rem; color: var(--red); font-weight: 600;
+    }
     .battery-row {
       display: flex; align-items: center; gap: 8px; margin-top: 7px;
     }
@@ -261,11 +284,25 @@
     .battery-charging-icon {
       font-size: .72rem;
     }
+    .battery-secondary { opacity: .9; }
 
     /* ── Push status ── */
     .push-status { font-size: .78rem; color: var(--dim); margin-top: 6px; }
     .push-status.ok { color: var(--green); }
     .push-status.warn { color: var(--yellow); }
+
+    /* ── Receiver diagnostics ── */
+    .diagnostics {
+      margin-top: 10px; font-size: .76rem; color: var(--dim);
+      border-top: 1px solid var(--border); padding-top: 8px;
+    }
+    .diagnostics summary { cursor: pointer; color: var(--text); }
+    .diag-grid {
+      display: grid; grid-template-columns: auto 1fr;
+      gap: 6px 10px; margin-top: 8px;
+    }
+    .diag-grid dt { color: var(--dim); }
+    .diag-grid dd { margin: 0; color: var(--text); font-variant-numeric: tabular-nums; }
 
     /* ── Debug footer ── */
     #debug-footer {
@@ -344,10 +381,16 @@
       <div id="streaming-badge" class="streaming-badge" style="display:none">🔴 STREAMING</div>
       <div id="talkback-indicator">📣 Parent speaking…</div>
       <div id="wakelock-indicator"></div>
-      <div id="battery-sender" class="battery-row" style="display:none">
-        <div class="battery-shell"><div class="battery-fill" id="battery-fill-sender"></div></div>
-        <span class="battery-text" id="battery-text-sender"></span>
-        <span class="battery-charging-icon" id="battery-charge-sender"></span>
+      <div id="battery-sender" class="battery-panel" style="display:none">
+        <div class="battery-meta">
+          <span class="battery-label">This device</span>
+          <span class="battery-warning" id="battery-warning-sender"></span>
+        </div>
+        <div class="battery-row">
+          <div class="battery-shell"><div class="battery-fill" id="battery-fill-sender"></div></div>
+          <span class="battery-text" id="battery-text-sender"></span>
+          <span class="battery-charging-icon" id="battery-charge-sender"></span>
+        </div>
       </div>
       <p class="hint">💡 Battery tip: lower screen brightness while monitoring.</p>
       <div class="btn-row">
@@ -368,19 +411,48 @@
         <div id="receiver-dot" class="dot"></div>
         <span id="receiver-status" class="status-text">Not connected</span>
       </div>
+      <div id="receiver-state-badge" class="status-badge state-idle">Idle</div>
+      <p id="receiver-note" class="receiver-note">Start listening to keep the receiver ready to reconnect when the browser allows it.</p>
       <div class="btn-row">
         <button id="btn-start-listening" class="btn btn-green">👂 Start Listening</button>
         <button id="btn-stop-listening"  class="btn btn-secondary" disabled>■ Stop</button>
       </div>
-      <div id="battery-receiver" class="battery-row" style="display:none">
-        <div class="battery-shell"><div class="battery-fill" id="battery-fill-receiver"></div></div>
-        <span class="battery-text" id="battery-text-receiver"></span>
-        <span class="battery-charging-icon" id="battery-charge-receiver"></span>
+      <div id="battery-remote" class="battery-panel" style="display:none">
+        <div class="battery-meta">
+          <span class="battery-label">Sender battery</span>
+          <span class="battery-warning" id="battery-warning-remote"></span>
+        </div>
+        <div class="battery-row">
+          <div class="battery-shell"><div class="battery-fill" id="battery-fill-remote"></div></div>
+          <span class="battery-text" id="battery-text-remote"></span>
+          <span class="battery-charging-icon" id="battery-charge-remote"></span>
+        </div>
+      </div>
+      <div id="battery-receiver" class="battery-panel battery-secondary" style="display:none">
+        <div class="battery-meta">
+          <span class="battery-label">This device</span>
+          <span class="battery-warning" id="battery-warning-receiver"></span>
+        </div>
+        <div class="battery-row">
+          <div class="battery-shell"><div class="battery-fill" id="battery-fill-receiver"></div></div>
+          <span class="battery-text" id="battery-text-receiver"></span>
+          <span class="battery-charging-icon" id="battery-charge-receiver"></span>
+        </div>
       </div>
       <div class="btn-row" style="margin-top:6px">
         <button id="btn-talkback" class="btn btn-talkback" disabled>🎤 Hold to Speak</button>
       </div>
       <p class="hint" style="margin-top:6px">Hold the button to talk back — audio plays on the sender device.</p>
+      <details class="diagnostics">
+        <summary>Diagnostics</summary>
+        <dl class="diag-grid">
+          <dt>State</dt><dd id="diag-state">idle</dd>
+          <dt>Heartbeat</dt><dd id="diag-heartbeat">—</dd>
+          <dt>Reconnect</dt><dd id="diag-reconnect">0 attempts</dd>
+          <dt>Visibility</dt><dd id="diag-visibility">visible</dd>
+          <dt>Last error</dt><dd id="diag-error">—</dd>
+        </dl>
+      </details>
     </div>
 
     <!-- Push notification status -->
@@ -410,29 +482,43 @@
 
 <!-- Debug footer: version + copy logs -->
 <div id="debug-footer">
-  <span class="version-label" id="version-label">v2026-07-16 · d041591</span>
+  <span class="version-label" id="version-label">v2026-07-25 · 0000000</span>
   <button id="btn-copy-logs">📋 Copy Debug Logs</button>
 </div>
 
 <!-- Toast notification -->
 <div id="toast"></div>
 
+<script src="./bmb-logic.js"></script>
 <script>
 'use strict';
+
+const {
+  RECEIVER_STATES,
+  calculateReconnectDelay,
+  isHeartbeatStale,
+  shouldResetBackoff,
+  formatRelativeAge,
+  getBatteryViewModel,
+} = window.BMBLogic;
 
 /* ============================================================
    Constants
    ============================================================ */
-const APP_VERSION      = 'v2026-07-16 · d041591';
+const APP_VERSION      = 'v2026-07-25 · 0000000';
 const SALT_STR         = 'baby-monitor-bridge-v1';
 const PBKDF2_ITER      = 600_000;  // OWASP-recommended minimum for PBKDF2-SHA256
 const VOX_TRIGGER_MS   = 1500;    // noise must exceed threshold for this long
 const VOX_SILENCE_MS   = 10_000;  // silence must last this long to stop stream
 const FFT_SIZE         = 256;
 const PEER_PREFIX      = 'bmb';
-const RECONNECT_DELAY  = 5000;
 const ID_RETRY_DELAY   = 5000;  // ms between unavailable-id retries
 const MAX_ID_RETRIES   = 24;    // up to ~120 s of retrying (24 × 5 s intervals)
+const HEARTBEAT_INTERVAL_MS = 12_000;
+const HEARTBEAT_TIMEOUT_MS  = 30_000;
+const STABLE_RESET_MS       = 45_000;
+const FAST_RESUME_DELAY_MS  = 800;
+const LOW_BATTERY_THRESHOLD = 20;
 
 /* ============================================================
    App State
@@ -469,9 +555,29 @@ const S = {
   senderMediaConn: null,
   senderPeerId:    null,
   reconnectTimer:  null,
+  reconnectAttempt: 0,
+  reconnectInFlight: false,
+  receiverState:   RECEIVER_STATES.IDLE,
+  receiverShouldRun: false,
+  receiverLastHeartbeatAt: 0,
+  receiverHeartbeatTimer: null,
+  receiverHealthTimer: null,
+  receiverLastStableAt: 0,
+  receiverLastError: '',
+  receiverLastReconnectDelay: 0,
+  receiverBackgroundSince: 0,
+  receiverConnToken: 0,
+  receiverConnectSeq: 0,
+  pushWakePending: false,
+  lastReceiverLogKey: '',
+  swMessageBound: false,
   isSpeaking:    false,      // true while hold-to-speak is active
   talkMicStream: null,       // mic stream for speak-back
   talkMediaConn: null,       // outgoing call to sender during speak-back
+
+  // Battery
+  localBattery: null,
+  remoteBattery: null,
 };
 
 /* ============================================================
@@ -601,9 +707,13 @@ async function sendWebPush(sub, vapidKeys) {
         'Content-Type':  'application/octet-stream',
       },
     });
-    dbg('Push response:', res.status);
+    if (!res.ok) throw new Error(`push ${res.status}`);
+    dbgRole('sender', 'push', `Push delivered (${res.status})`, { throttleMs: 1000 });
   } catch (e) {
-    dbg('Push send failed (likely CORS/blocked):', e.message);
+    dbgRole('sender', 'push', `Push send failed: ${e.message}`, {
+      dedupeKey: `push:${e.message}`,
+      throttleMs: 10000,
+    });
   }
 }
 
@@ -616,9 +726,23 @@ async function registerSW() {
   if (!('serviceWorker' in navigator)) return;
   try {
     swReg = await navigator.serviceWorker.register('./sw.js');
-    dbg('SW registered');
+    if (!S.swMessageBound) {
+      navigator.serviceWorker.addEventListener('message', (event) => {
+        const data = event.data || {};
+        if (data.type === 'push-received') {
+          S.pushWakePending = true;
+          dbgRole('receiver', 'push', 'Service worker received push wake signal', { throttleMs: 1000 });
+          if (document.visibilityState === 'visible') requestReceiverRecovery('push-wake', { force: false });
+        } else if (data.type === 'notification-click') {
+          dbgRole('receiver', 'push', 'Notification click returned to app', { throttleMs: 1000 });
+          requestReceiverRecovery('notification-click', { force: true });
+        }
+      });
+      S.swMessageBound = true;
+    }
+    dbgRole('app', 'sw', 'Service worker registered');
   } catch (e) {
-    dbg('SW registration failed:', e.message);
+    dbgRole('app', 'sw', `Service worker registration failed: ${e.message}`);
   }
 }
 
@@ -684,6 +808,255 @@ function makePeer(id) {
     },
   };
   return id ? new Peer(id, opts) : new Peer(opts);
+}
+
+function dbgRole(role, event, message, opts = {}) {
+  const key = opts.dedupeKey || `${role}:${event}:${message}`;
+  const now = Date.now();
+  const throttleMs = opts.throttleMs || 0;
+  if (!S._logThrottle) S._logThrottle = new Map();
+  if (throttleMs) {
+    const last = S._logThrottle.get(key) || 0;
+    if ((now - last) < throttleMs) return;
+    S._logThrottle.set(key, now);
+  }
+  dbg(`[${role}] [${event}] ${message}`);
+}
+
+function isReceiverBackgrounded() {
+  return document.visibilityState !== 'visible';
+}
+
+function receiverStateMeta(state) {
+  switch (state) {
+    case RECEIVER_STATES.LIVE:
+      return {
+        badge: 'Live',
+        dot: 'green',
+        note: 'Receiver is actively monitoring. Background suspension is still browser-limited on Android/iOS.',
+      };
+    case RECEIVER_STATES.CONNECTING:
+      return {
+        badge: 'Connecting',
+        dot: 'yellow',
+        note: 'Opening signalling and data channels to the sender.',
+      };
+    case RECEIVER_STATES.RECONNECTING:
+      return {
+        badge: 'Reconnecting',
+        dot: 'yellow',
+        note: 'Monitoring intent is preserved. The app will keep retrying with backoff until you stop it.',
+      };
+    case RECEIVER_STATES.DEGRADED_BACKGROUND:
+      return {
+        badge: 'Background-limited',
+        dot: 'yellow',
+        note: 'Android/browser background limits may suspend WebRTC. The app will retry as soon as runtime returns.',
+      };
+    case RECEIVER_STATES.DISCONNECTED:
+      return {
+        badge: 'Degraded',
+        dot: 'red',
+        note: 'The runtime is offline or the link is stale. Reconnect will resume when network/runtime allow it.',
+      };
+    case RECEIVER_STATES.STOPPED_BY_USER:
+      return {
+        badge: 'Stopped',
+        dot: '',
+        note: 'Receiver is stopped by user and will not reconnect until started again.',
+      };
+    case RECEIVER_STATES.IDLE:
+    default:
+      return {
+        badge: 'Idle',
+        dot: '',
+        note: 'Start listening to keep the receiver ready to reconnect when the browser allows it.',
+      };
+  }
+}
+
+function updateReceiverDiagnostics() {
+  const heartbeatAge = formatRelativeAge(S.receiverLastHeartbeatAt);
+  qs('#diag-state').textContent = S.receiverState;
+  qs('#diag-heartbeat').textContent = heartbeatAge;
+  qs('#diag-reconnect').textContent = `${S.reconnectAttempt} attempt${S.reconnectAttempt === 1 ? '' : 's'}${S.receiverLastReconnectDelay ? ` · ${Math.round(S.receiverLastReconnectDelay / 1000)}s backoff` : ''}`;
+  qs('#diag-visibility').textContent = document.visibilityState;
+  qs('#diag-error').textContent = S.receiverLastError || '—';
+}
+
+function setReceiverState(state, statusText, opts = {}) {
+  S.receiverState = state;
+  if (opts.error !== undefined) S.receiverLastError = opts.error || '';
+
+  const meta = receiverStateMeta(state);
+  receiverStatus(meta.dot, statusText || meta.badge);
+  const badge = qs('#receiver-state-badge');
+  badge.className = `status-badge state-${state}`;
+  badge.textContent = meta.badge;
+  qs('#receiver-note').textContent = opts.note || meta.note;
+
+  if (state === RECEIVER_STATES.LIVE) {
+    updateReceiverBtns('connected');
+  } else if ([RECEIVER_STATES.CONNECTING, RECEIVER_STATES.RECONNECTING, RECEIVER_STATES.DEGRADED_BACKGROUND, RECEIVER_STATES.DISCONNECTED].includes(state)) {
+    updateReceiverBtns('connecting');
+  } else {
+    updateReceiverBtns('idle');
+  }
+
+  if (!opts.silent) {
+    const reason = opts.reason ? ` (${opts.reason})` : '';
+    dbgRole('receiver', 'state', `${state}${reason}${statusText ? ` → ${statusText}` : ''}`, {
+      dedupeKey: `receiver-state:${state}:${opts.reason || ''}:${statusText || ''}`,
+      throttleMs: 1500,
+    });
+  }
+  updateReceiverDiagnostics();
+}
+
+function clearReceiverReconnectTimer() {
+  if (S.reconnectTimer) {
+    clearTimeout(S.reconnectTimer);
+    S.reconnectTimer = null;
+  }
+}
+
+function clearReceiverHeartbeatTimers() {
+  if (S.receiverHeartbeatTimer) {
+    clearInterval(S.receiverHeartbeatTimer);
+    S.receiverHeartbeatTimer = null;
+  }
+  if (S.receiverHealthTimer) {
+    clearInterval(S.receiverHealthTimer);
+    S.receiverHealthTimer = null;
+  }
+}
+
+function clearSenderConnection(reason = 'reset') {
+  if (S.senderConn) {
+    S.senderConn.onopen = null;
+    S.senderConn.ondata = null;
+    S.senderConn.onclose = null;
+    S.senderConn.onerror = null;
+    try { S.senderConn.close(); } catch (_) {}
+    S.senderConn = null;
+    dbgRole('receiver', 'link', `Closed sender data connection (${reason})`, { throttleMs: 1000 });
+  }
+  if (S.senderMediaConn) {
+    try { S.senderMediaConn.close(); } catch (_) {}
+    S.senderMediaConn = null;
+  }
+}
+
+function noteReceiverHeartbeat(source) {
+  S.receiverLastHeartbeatAt = Date.now();
+  if (S.receiverState !== RECEIVER_STATES.STOPPED_BY_USER && S.receiverState !== RECEIVER_STATES.IDLE) {
+    updateReceiverDiagnostics();
+  }
+  dbgRole('receiver', 'heartbeat', `Heartbeat ok via ${source}`, {
+    dedupeKey: `hb:${source}`,
+    throttleMs: HEARTBEAT_INTERVAL_MS,
+  });
+}
+
+async function sendToSender(msg) {
+  if (!S.senderConn || !S.senderConn.open) return false;
+  try {
+    S.senderConn.send(await encrypt(msg));
+    return true;
+  } catch (e) {
+    S.receiverLastError = e.message;
+    updateReceiverDiagnostics();
+    dbgRole('receiver', 'send', `Failed to send ${msg.type}: ${e.message}`, { throttleMs: 2000 });
+    return false;
+  }
+}
+
+async function sendReceiverHeartbeat() {
+  if (!S.receiverShouldRun || !S.senderConn || !S.senderConn.open) return;
+  await sendToSender({ type: 'ping', timestamp: Date.now(), state: S.receiverState });
+}
+
+function startReceiverHealthChecks() {
+  clearReceiverHeartbeatTimers();
+  noteReceiverHeartbeat('open');
+  S.receiverHeartbeatTimer = setInterval(() => { sendReceiverHeartbeat(); }, HEARTBEAT_INTERVAL_MS);
+  S.receiverHealthTimer = setInterval(() => {
+    if (!S.receiverShouldRun || !S.senderConn) return;
+    if (isHeartbeatStale({ lastHeartbeatAt: S.receiverLastHeartbeatAt, timeoutMs: HEARTBEAT_TIMEOUT_MS })) {
+      S.receiverLastError = 'Heartbeat timeout';
+      updateReceiverDiagnostics();
+      dbgRole('receiver', 'heartbeat', 'Heartbeat stale — forcing reconnect', {
+        dedupeKey: 'hb-timeout',
+        throttleMs: HEARTBEAT_TIMEOUT_MS / 2,
+      });
+      scheduleReconnect('heartbeat-timeout', { immediate: true, force: true });
+    }
+  }, 3000);
+}
+
+function maybeResetReconnectBackoff() {
+  if (shouldResetBackoff({ lastStableAt: S.receiverLastStableAt, stableWindowMs: STABLE_RESET_MS })) {
+    S.reconnectAttempt = 0;
+    S.receiverLastReconnectDelay = 0;
+  }
+}
+
+function scheduleReconnect(reason, opts = {}) {
+  if (!S.receiverShouldRun) return;
+  if (!S.peer || S.peer.destroyed) return;
+  if (!navigator.onLine) {
+    setReceiverState(RECEIVER_STATES.DISCONNECTED, 'Offline — waiting for network', {
+      reason,
+      note: 'Network is offline. Monitoring intent is preserved and reconnect resumes automatically when online.',
+      error: reason,
+    });
+    return;
+  }
+
+  clearReceiverHeartbeatTimers();
+  if (opts.force) clearSenderConnection(reason);
+
+  const backgrounded = isReceiverBackgrounded();
+  const targetState = backgrounded ? RECEIVER_STATES.DEGRADED_BACKGROUND : RECEIVER_STATES.RECONNECTING;
+  maybeResetReconnectBackoff();
+
+  if (S.reconnectTimer && !opts.replace && !opts.immediate) {
+    setReceiverState(targetState, backgrounded ? 'Background limited — waiting to resume' : 'Reconnecting…', {
+      reason,
+      error: reason,
+      silent: true,
+    });
+    return;
+  }
+
+  clearReceiverReconnectTimer();
+  const nextAttempt = S.reconnectAttempt + 1;
+  const delay = opts.immediate ? FAST_RESUME_DELAY_MS : calculateReconnectDelay(nextAttempt, { random: Math.random });
+  S.reconnectAttempt = nextAttempt;
+  S.receiverLastReconnectDelay = delay;
+  setReceiverState(targetState, backgrounded ? 'Background limited — reconnect queued' : `Reconnecting… (${nextAttempt})`, {
+    reason,
+    error: reason,
+  });
+  dbgRole('receiver', 'reconnect', `Attempt ${nextAttempt} in ${delay}ms (${reason})`, {
+    dedupeKey: `reconnect:${reason}:${nextAttempt}:${delay}`,
+    throttleMs: 500,
+  });
+
+  S.reconnectTimer = setTimeout(() => {
+    S.reconnectTimer = null;
+    connectToSender(reason);
+  }, delay);
+  updateReceiverDiagnostics();
+}
+
+function requestReceiverRecovery(reason, opts = {}) {
+  if (!S.receiverShouldRun) return;
+  if (S.peer && !S.peer.destroyed && S.peer.disconnected) {
+    dbgRole('receiver', 'peer', `Reconnecting signalling peer (${reason})`, { throttleMs: 1000 });
+    try { S.peer.reconnect(); } catch (e) { dbgRole('receiver', 'peer', `Peer reconnect failed: ${e.message}`, { throttleMs: 2000 }); }
+  }
+  scheduleReconnect(reason, { immediate: true, replace: true, force: !!opts.force });
 }
 
 /* ============================================================
@@ -849,13 +1222,17 @@ function setupReceiverDataConn(conn) {
   S.receivers.get(pid).dataConn = conn;
 
   conn.on('open', async () => {
-    dbg('Data channel open with receiver', pid);
+    dbgRole('sender', 'link', `Data channel open with receiver ${pid}`);
     updateReceiverBadge();
 
     // Send our VAPID public key so receiver can subscribe to push
     try {
       conn.send(await encrypt({ type: 'vapid_key', key: S.vapidKeys.publicKey }));
     } catch (e) { dbg('Failed to send VAPID key:', e.message); }
+    if (S.localBattery) {
+      try { conn.send(await encrypt({ type: 'battery', role: 'sender', level: S.localBattery.level, charging: S.localBattery.charging, updatedAt: S.localBattery.updatedAt })); }
+      catch (e) { dbgRole('sender', 'battery', `Initial battery sync failed: ${e.message}`, { throttleMs: 3000 }); }
+    }
 
     // If already streaming, call this late-joining receiver
     if (S.isStreaming && S.micStream) {
@@ -868,7 +1245,17 @@ function setupReceiverDataConn(conn) {
       const msg = await decrypt(raw);
       if (msg.type === 'register_push') {
         S.receivers.get(pid).pushSub = msg.subscription;
-        dbg('Push subscription registered for', pid);
+        dbgRole('sender', 'push', `Push subscription registered for ${pid}`);
+      } else if (msg.type === 'ping') {
+        conn.send(await encrypt({
+          type: 'pong',
+          timestamp: Date.now(),
+          senderBattery: S.localBattery ? {
+            level: S.localBattery.level,
+            charging: S.localBattery.charging,
+            updatedAt: S.localBattery.updatedAt,
+          } : null,
+        }));
       }
     } catch (e) { dbg('Decrypt failed from', pid, ':', e.message); }
   });
@@ -1037,58 +1424,140 @@ function releaseWakeLock() {
 /* ── Battery Status API ── */
 async function initBattery() {
   if (!('getBattery' in navigator)) {
-    dbg('Battery Status API not supported');
+    dbgRole('app', 'battery', 'Battery Status API not supported');
+    renderBatterySlot('sender', { visible: false, text: 'Unavailable', charge: '', color: 'var(--dim)', fillWidth: '0%', warning: '' });
+    renderBatterySlot('receiver', { visible: false, text: 'Unavailable', charge: '', color: 'var(--dim)', fillWidth: '0%', warning: '' });
     return;
   }
   try {
     const batt = await navigator.getBattery();
-    renderBattery(batt);
-    batt.addEventListener('levelchange',   () => renderBattery(batt));
-    batt.addEventListener('chargingchange', () => renderBattery(batt));
-    dbg('Battery API initialized — level:', Math.round(batt.level * 100) + '%');
+    const syncBattery = () => renderBattery(batt);
+    syncBattery();
+    batt.addEventListener('levelchange', syncBattery);
+    batt.addEventListener('chargingchange', syncBattery);
+    dbgRole('app', 'battery', `Battery API initialized — level ${Math.round(batt.level * 100)}%`);
   } catch (e) {
-    dbg('Battery API error:', e.message);
+    dbgRole('app', 'battery', `Battery API error: ${e.message}`);
   }
 }
 
 function renderBattery(batt) {
-  const level    = Math.round(batt.level * 100);
-  const charging = batt.charging;
-  const fillPct  = level + '%';
-  const color    = level > 50 ? 'var(--green)' : level > 20 ? 'var(--yellow)' : 'var(--red)';
-  const labelTxt = level + '%';
-  const chargeEl = charging ? '⚡' : '';
+  S.localBattery = {
+    level: Math.round(batt.level * 100),
+    charging: !!batt.charging,
+    updatedAt: Date.now(),
+  };
+  renderBatteryViews();
+  if (S.mode === 'sender' && S.isMonitoring) broadcastSenderBattery();
+}
 
-  for (const suffix of ['sender', 'receiver']) {
-    const row    = qs('#battery-' + suffix);
-    const fill   = qs('#battery-fill-' + suffix);
-    const label  = qs('#battery-text-' + suffix);
-    const charge = qs('#battery-charge-' + suffix);
-    if (!row) continue;
-    row.style.display   = 'flex';
-    fill.style.width    = fillPct;
-    fill.style.background = color;
-    label.style.color   = color;
-    label.textContent   = labelTxt;
-    charge.textContent  = chargeEl;
+function renderBatterySlot(slot, viewModel) {
+  const row = qs('#battery-' + slot);
+  const fill = qs('#battery-fill-' + slot);
+  const label = qs('#battery-text-' + slot);
+  const charge = qs('#battery-charge-' + slot);
+  const warning = qs('#battery-warning-' + slot);
+  if (!row || !fill || !label || !charge || !warning) return;
+  row.style.display = viewModel.visible ? 'block' : 'none';
+  fill.style.width = viewModel.fillWidth;
+  fill.style.background = viewModel.color;
+  label.style.color = viewModel.color;
+  label.textContent = viewModel.text;
+  charge.textContent = viewModel.charge;
+  warning.textContent = viewModel.warning || '';
+}
+
+function renderBatteryViews() {
+  renderBatterySlot('sender', getBatteryViewModel({
+    label: 'This device',
+    battery: S.localBattery,
+    lowThreshold: LOW_BATTERY_THRESHOLD,
+  }));
+  renderBatterySlot('receiver', getBatteryViewModel({
+    label: 'This device',
+    battery: S.localBattery,
+    lowThreshold: LOW_BATTERY_THRESHOLD,
+  }));
+  renderBatterySlot('remote', getBatteryViewModel({
+    label: 'Sender battery',
+    battery: S.remoteBattery,
+    lowThreshold: LOW_BATTERY_THRESHOLD,
+  }));
+}
+
+async function broadcastSenderBattery() {
+  if (!S.localBattery) return;
+  const payload = {
+    type: 'battery',
+    role: 'sender',
+    level: S.localBattery.level,
+    charging: S.localBattery.charging,
+    updatedAt: S.localBattery.updatedAt,
+  };
+  for (const [, rx] of S.receivers) {
+    if (!rx.dataConn || !rx.dataConn.open) continue;
+    try {
+      rx.dataConn.send(await encrypt(payload));
+    } catch (e) {
+      dbgRole('sender', 'battery', `Battery update failed: ${e.message}`, { throttleMs: 3000 });
+    }
   }
 }
 
-/* ── Re-acquire wake lock / heal receiver peer when page becomes visible again ── */
+/* ── App lifecycle recovery ── */
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState !== 'visible') return;
-  if (S.isMonitoring && !S.wakeLock) acquireWakeLock();
-  // Receiver: if the peer is disconnected from the signalling server after being
-  // backgrounded, kick a reconnect now rather than waiting for a timeout.
-  if (S.mode === 'receiver' && S.peer && !S.peer.destroyed) {
-    if (S.peer.disconnected) {
-      dbg('Page visible — reconnecting peer after background suspend');
-      S.peer.reconnect();
-    } else if (!S.senderConn || ['failed', 'disconnected', 'closed'].includes(S.senderConn.peerConnection?.connectionState)) {
-      dbg('Page visible — re-connecting data channel to sender');
-      connectToSender();
+  updateReceiverDiagnostics();
+  if (document.visibilityState === 'visible') {
+    if (S.isMonitoring && !S.wakeLock) acquireWakeLock();
+    if (S.mode === 'receiver' && S.receiverShouldRun) {
+      S.receiverBackgroundSince = 0;
+      requestReceiverRecovery(S.pushWakePending ? 'resume-after-push' : 'visibility-visible', { force: !!S.pushWakePending });
+      S.pushWakePending = false;
     }
+    return;
   }
+
+  if (S.mode === 'receiver' && S.receiverShouldRun) {
+    S.receiverBackgroundSince = Date.now();
+    setReceiverState(RECEIVER_STATES.DEGRADED_BACKGROUND, 'Background limited', {
+      reason: 'visibility-hidden',
+      silent: true,
+    });
+  }
+});
+
+window.addEventListener('online', () => {
+  if (S.mode === 'receiver' && S.receiverShouldRun) requestReceiverRecovery('network-online', { force: true });
+});
+
+window.addEventListener('offline', () => {
+  if (S.mode === 'receiver' && S.receiverShouldRun) {
+    clearReceiverHeartbeatTimers();
+    setReceiverState(RECEIVER_STATES.DISCONNECTED, 'Offline — waiting for network', {
+      reason: 'network-offline',
+      error: 'offline',
+    });
+  }
+});
+
+window.addEventListener('pageshow', () => {
+  if (S.mode === 'receiver' && S.receiverShouldRun) requestReceiverRecovery('pageshow', { force: true });
+});
+
+window.addEventListener('pagehide', () => {
+  if (S.mode === 'receiver' && S.receiverShouldRun) {
+    dbgRole('receiver', 'lifecycle', 'Page hidden; runtime may suspend WebRTC in background', { throttleMs: 2000 });
+  }
+});
+
+document.addEventListener('freeze', () => {
+  if (S.mode === 'receiver' && S.receiverShouldRun) {
+    dbgRole('receiver', 'lifecycle', 'Page freeze event observed', { throttleMs: 2000 });
+  }
+});
+
+document.addEventListener('resume', () => {
+  if (S.mode === 'receiver' && S.receiverShouldRun) requestReceiverRecovery('resume-event', { force: true });
 });
 
 /* ============================================================
@@ -1098,7 +1567,14 @@ document.addEventListener('visibilitychange', () => {
 async function initReceiver() {
   if (!S.password) { toast('Enter a password first'); updateReceiverBtns('idle'); return; }
 
-  receiverStatus('yellow', 'Deriving key…');
+  S.receiverShouldRun = true;
+  S.receiverLastError = '';
+  S.receiverLastHeartbeatAt = 0;
+  S.reconnectAttempt = 0;
+  S.receiverLastReconnectDelay = 0;
+  S.remoteBattery = null;
+  renderBatteryViews();
+  setReceiverState(RECEIVER_STATES.CONNECTING, 'Deriving key…', { reason: 'start' });
   S.cryptoKey   = await deriveKey(S.password);
   S.senderPeerId = await computePeerId(S.password);
 
@@ -1110,32 +1586,31 @@ async function initReceiver() {
     await Notification.requestPermission();
   }
 
-  receiverStatus('yellow', 'Connecting…');
+  setReceiverState(RECEIVER_STATES.CONNECTING, 'Connecting…', { reason: 'peer-create' });
   S.peer = makePeer(); // random ID
 
   S.peer.on('open', (id) => {
-    dbg('Receiver peer open:', id);
-    connectToSender();
+    dbgRole('receiver', 'peer', `Receiver peer open: ${id}`);
+    connectToSender('peer-open');
   });
 
   S.peer.on('error', (err) => {
-    dbg('Receiver peer error:', err.type);
+    S.receiverLastError = err.type;
+    updateReceiverDiagnostics();
+    dbgRole('receiver', 'peer', `Receiver peer error: ${err.type}`, {
+      dedupeKey: `peer-error:${err.type}`,
+      throttleMs: 3000,
+    });
     if (err.type === 'peer-unavailable') {
-      // Sender is not yet reachable — schedule a reconnect attempt instead of giving up.
-      dbg('Sender peer unavailable — will retry');
-      receiverStatus('yellow', 'Sender unavailable — retrying…');
-      scheduleReconnect();
+      scheduleReconnect('peer-unavailable');
     } else if (err.type === 'network' || err.type === 'socket-error' || err.type === 'socket-closed' || err.type === 'server-error') {
-      // Transient signalling-server error (common when the browser is backgrounded).
-      // PeerJS will fire 'disconnected' immediately after and call reconnect() automatically —
-      // so just show a yellow status and let the existing disconnected handler do the work.
-      dbg('Transient peer error — waiting for auto-reconnect');
-      receiverStatus('yellow', 'Reconnecting…');
-      updateReceiverBtns('connecting');
+      scheduleReconnect(`peer-${err.type}`, { immediate: true });
     } else {
       toast('Connection error: ' + err.type);
-      receiverStatus('red', 'Error: ' + err.type);
-      updateReceiverBtns('idle');
+      setReceiverState(RECEIVER_STATES.DISCONNECTED, 'Error: ' + err.type, {
+        reason: err.type,
+        error: err.type,
+      });
     }
   });
 
@@ -1143,81 +1618,117 @@ async function initReceiver() {
   S.peer.on('call', (call) => {
     // Verify the call originates from the expected sender peer ID
     if (call.peer !== S.senderPeerId) {
-      dbg('Rejected call from unexpected peer:', call.peer);
+      dbgRole('receiver', 'media', `Rejected call from unexpected peer ${call.peer}`, { throttleMs: 3000 });
       call.close();
       return;
     }
-    dbg('Incoming audio call from sender');
+    dbgRole('receiver', 'media', 'Incoming audio call from sender', { throttleMs: 500 });
     S.senderMediaConn = call;
     call.answer(); // answer without sending audio back
 
     call.on('stream', (remoteStream) => {
-      dbg('Remote audio stream received');
+      noteReceiverHeartbeat('media-stream');
       const audio = qs('#remote-audio');
       audio.srcObject = remoteStream;
-      audio.play().catch(e => dbg('Audio play error:', e.message));
-      receiverStatus('green', '🔊 Audio playing');
+      audio.play().catch(e => {
+        S.receiverLastError = `audio-play: ${e.message}`;
+        updateReceiverDiagnostics();
+        dbgRole('receiver', 'media', `Audio play error: ${e.message}`, { throttleMs: 4000 });
+      });
+      setReceiverState(RECEIVER_STATES.LIVE, '🔊 Audio playing', { reason: 'media-stream', silent: true });
       addLogEntry('🔊', 'Audio stream started');
     });
 
     call.on('close', () => {
-      dbg('Audio stream ended');
+      dbgRole('receiver', 'media', 'Audio stream ended', { throttleMs: 500 });
       const audio = qs('#remote-audio');
       audio.srcObject = null;
-      receiverStatus('green', 'Connected — stream ended');
+      if (S.receiverShouldRun && S.senderConn && S.senderConn.open) {
+        setReceiverState(RECEIVER_STATES.LIVE, 'Connected — stream ended', { reason: 'media-close', silent: true });
+      }
       addLogEntry('🔕', 'Audio stream ended');
     });
 
-    call.on('error', (e) => dbg('Call error:', e.message));
+    call.on('error', (e) => dbgRole('receiver', 'media', `Call error: ${e.message}`, { throttleMs: 3000 }));
   });
 
   S.peer.on('disconnected', () => {
-    if (S.peer && !S.peer.destroyed) S.peer.reconnect();
+    if (S.peer && !S.peer.destroyed && S.receiverShouldRun) {
+      scheduleReconnect('peer-disconnected', { immediate: true, force: true });
+    }
+  });
+
+  S.peer.on('close', () => {
+    if (S.receiverShouldRun) scheduleReconnect('peer-closed', { immediate: true, force: true });
   });
 }
 
-function connectToSender() {
-  dbg('Connecting to sender:', S.senderPeerId);
+function connectToSender(reason = 'connect') {
+  if (!S.receiverShouldRun || !S.peer || S.peer.destroyed || !S.senderPeerId) return;
+  if (S.reconnectInFlight) {
+    dbgRole('receiver', 'reconnect', `Connect skipped while another attempt is active (${reason})`, { throttleMs: 1000 });
+    return;
+  }
+  if (S.senderConn && S.senderConn.open) {
+    noteReceiverHeartbeat('already-open');
+    return;
+  }
+
+  S.reconnectInFlight = true;
+  clearReceiverReconnectTimer();
+  clearSenderConnection(reason);
+  const token = ++S.receiverConnToken;
+
+  setReceiverState(S.reconnectAttempt ? RECEIVER_STATES.RECONNECTING : RECEIVER_STATES.CONNECTING, 'Connecting to sender…', {
+    reason,
+    silent: true,
+  });
+  dbgRole('receiver', 'reconnect', `Connecting to sender ${S.senderPeerId} (${reason})`, { throttleMs: 500 });
   S.senderConn = S.peer.connect(S.senderPeerId, { reliable: true, serialization: 'raw' });
 
   S.senderConn.on('open', () => {
-    dbg('Data channel to sender open');
-    receiverStatus('green', 'Connected to sender');
-    updateReceiverBtns('connected');
-    if (S.reconnectTimer) { clearTimeout(S.reconnectTimer); S.reconnectTimer = null; }
+    if (token !== S.receiverConnToken) return;
+    S.reconnectInFlight = false;
+    clearReceiverReconnectTimer();
+    S.receiverLastStableAt = Date.now();
+    noteReceiverHeartbeat('data-open');
+    setReceiverState(RECEIVER_STATES.LIVE, 'Connected to sender', { reason: 'data-open' });
+    startReceiverHealthChecks();
+    sendReceiverHeartbeat();
   });
 
   S.senderConn.on('data', async (raw) => {
+    if (token !== S.receiverConnToken) return;
     try {
       const msg = await decrypt(raw);
       await handleSenderMsg(msg);
-    } catch (e) { dbg('Decrypt from sender failed:', e.message); }
+    } catch (e) {
+      dbgRole('receiver', 'decrypt', `Decrypt from sender failed: ${e.message}`, { throttleMs: 3000 });
+    }
   });
 
   S.senderConn.on('close', () => {
-    dbg('Data channel to sender closed');
-    receiverStatus('yellow', 'Disconnected — retrying…');
-    updateReceiverBtns('connecting');
-    scheduleReconnect();
+    if (token !== S.receiverConnToken) return;
+    S.reconnectInFlight = false;
+    scheduleReconnect('data-close', { force: true });
   });
 
   S.senderConn.on('error', (err) => {
-    dbg('Sender data conn error:', err.message);
-    scheduleReconnect();
+    if (token !== S.receiverConnToken) return;
+    S.reconnectInFlight = false;
+    S.receiverLastError = err.message || 'sender-conn-error';
+    updateReceiverDiagnostics();
+    dbgRole('receiver', 'link', `Sender data conn error: ${err.message}`, {
+      dedupeKey: `sender-conn:${err.message}`,
+      throttleMs: 3000,
+    });
+    scheduleReconnect('data-error', { force: true });
   });
-}
-
-function scheduleReconnect() {
-  if (S.reconnectTimer || !S.peer || S.peer.destroyed) return;
-  S.reconnectTimer = setTimeout(() => {
-    S.reconnectTimer = null;
-    if (S.peer && !S.peer.destroyed) connectToSender();
-  }, RECONNECT_DELAY);
 }
 
 async function handleSenderMsg(msg) {
   if (msg.type === 'vapid_key') {
-    dbg('Received VAPID public key from sender');
+    dbgRole('receiver', 'push', 'Received VAPID public key from sender', { throttleMs: 1000 });
     const sub = await subscribePush(msg.key);
     if (sub) {
       qs('#push-status').textContent = '✅ Push subscription active';
@@ -1225,20 +1736,41 @@ async function handleSenderMsg(msg) {
       // Serialize and send back to sender
       try {
         const subObj = JSON.parse(JSON.stringify(sub));
-        S.senderConn.send(await encrypt({ type: 'register_push', subscription: subObj }));
-        dbg('Push subscription sent to sender');
-      } catch (e) { dbg('Failed to send push sub:', e.message); }
+        await sendToSender({ type: 'register_push', subscription: subObj });
+        dbgRole('receiver', 'push', 'Push subscription sent to sender', { throttleMs: 1000 });
+      } catch (e) { dbgRole('receiver', 'push', `Failed to send push sub: ${e.message}`, { throttleMs: 3000 }); }
     } else {
       qs('#push-status').textContent = '⚠ Push not available (check browser permissions)';
       qs('#push-status').className = 'push-status warn';
     }
   } else if (msg.type === 'alert') {
+    noteReceiverHeartbeat('alert');
     handleAlert(msg);
+  } else if (msg.type === 'pong') {
+    noteReceiverHeartbeat('pong');
+    if (msg.senderBattery) {
+      S.remoteBattery = {
+        level: msg.senderBattery.level,
+        charging: !!msg.senderBattery.charging,
+        updatedAt: msg.senderBattery.updatedAt || Date.now(),
+      };
+      renderBatteryViews();
+    }
+  } else if (msg.type === 'battery' && msg.role === 'sender') {
+    S.remoteBattery = {
+      level: msg.level,
+      charging: !!msg.charging,
+      updatedAt: msg.updatedAt || Date.now(),
+    };
+    renderBatteryViews();
   }
 }
 
 function handleAlert(msg) {
   const time = new Date(msg.timestamp).toLocaleTimeString();
+  if (S.receiverShouldRun && S.senderConn && S.senderConn.open) {
+    setReceiverState(RECEIVER_STATES.LIVE, 'Connected to sender', { reason: 'alert', silent: true });
+  }
   addLogEntry('🔔', `Noise detected (level ${msg.level || '—'})`);
 
   // Hardware vibration
@@ -1259,7 +1791,7 @@ function handleAlert(msg) {
 }
 
 async function startTalkback() {
-  if (S.isSpeaking || !S.senderPeerId || !S.peer || S.peer.destroyed) return;
+  if (S.isSpeaking || !S.senderPeerId || !S.peer || S.peer.destroyed || S.receiverState !== RECEIVER_STATES.LIVE) return;
   dbg('Talkback: requesting microphone');
   try {
     S.talkMicStream = await navigator.mediaDevices.getUserMedia({
@@ -1297,16 +1829,21 @@ function stopTalkback() {
 }
 
 async function stopReceiver() {
-  dbg('Stopping receiver');
+  dbgRole('receiver', 'lifecycle', 'Stopping receiver');
+  S.receiverShouldRun = false;
   stopTalkback();
-  if (S.reconnectTimer) { clearTimeout(S.reconnectTimer); S.reconnectTimer = null; }
-  if (S.senderConn)      { S.senderConn.close();      S.senderConn = null; }
-  if (S.senderMediaConn) { S.senderMediaConn.close(); S.senderMediaConn = null; }
+  clearReceiverReconnectTimer();
+  clearReceiverHeartbeatTimers();
+  clearSenderConnection('stop');
+  S.reconnectInFlight = false;
+  S.reconnectAttempt = 0;
+  S.receiverLastReconnectDelay = 0;
+  S.remoteBattery = null;
+  renderBatteryViews();
   if (S.peer)            { S.peer.destroy();           S.peer = null; }
   const audio = qs('#remote-audio');
   if (audio) audio.srcObject = null;
-  receiverStatus('', 'Stopped');
-  updateReceiverBtns('idle');
+  setReceiverState(RECEIVER_STATES.STOPPED_BY_USER, 'Stopped', { reason: 'user-stop' });
 }
 
 /* ============================================================
@@ -1374,7 +1911,7 @@ function setBtn(id, disabled) {
 function updateReceiverBtns(state) {
   // state: 'idle' | 'connecting' | 'connected'
   setBtn('btn-start-listening', state !== 'idle');
-  setBtn('btn-stop-listening',  state !== 'connected');
+  setBtn('btn-stop-listening',  state === 'idle');
   setBtn('btn-talkback',        state !== 'connected');
 }
 
@@ -1512,6 +2049,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Initialize level meter marker at default threshold position
   updateLevelMeter(0);
+  setReceiverState(RECEIVER_STATES.IDLE, 'Not connected', { silent: true });
+  renderBatteryViews();
 
   // Battery level indicator
   initBattery();
